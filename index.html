@@ -5,57 +5,907 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>神田野菜マネージメント</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;background:#f5f7f2;color:#243024}
-header{background:#fff;border-bottom:1px solid #ddd;padding:16px;position:sticky;top:0;z-index:5}h1{font-size:21px;margin:0 0 4px}.sub,.muted{font-size:12px;color:#777}
-main{max-width:760px;margin:auto;padding:14px 14px 90px}.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 2px 10px #0001}
-.kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px}.k{padding:15px;border-radius:14px;background:#f0f5ed}.k b{display:block;font-size:24px;margin-top:5px}.k span{font-size:12px;color:#666}
-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;display:grid;grid-template-columns:repeat(4,1fr);z-index:10}nav button{border:0;background:#fff;padding:10px 4px;font-size:12px;color:#555}nav button.active{color:#19733a;font-weight:700}
-.item{border-top:1px solid #eee;padding:12px 0}.item:first-child{border-top:0}.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef3ed;font-size:11px}.blue{color:#1266d6}.yellow{color:#9a7200}
-.hidden{display:none}.login{max-width:420px;margin:50px auto}.login input{width:100%;padding:13px;border:1px solid #ccc;border-radius:10px;margin:7px 0;font-size:16px}.primary,.secondary{border:0;border-radius:10px;padding:11px 14px;font-weight:700}.primary{background:#19733a;color:#fff}.secondary{background:#eef3ed}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.err{color:#b00020;font-size:13px;margin-top:10px}
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;
+ background:#f5f7f2;
+ color:#243024
+}
+header{
+ background:#fff;
+ border-bottom:1px solid #ddd;
+ padding:16px;
+ position:sticky;
+ top:0;
+ z-index:5
+}
+h1{font-size:21px;margin:0 0 4px}
+h2{margin-top:0}
+h3{margin-top:0}
+.sub,.muted{font-size:12px;color:#777}
+main{
+ max-width:760px;
+ margin:auto;
+ padding:14px 14px 90px
+}
+.card{
+ background:#fff;
+ border-radius:16px;
+ padding:16px;
+ margin-bottom:12px;
+ box-shadow:0 2px 10px #0001
+}
+.kpi{
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:10px
+}
+.k{
+ padding:15px;
+ border-radius:14px;
+ background:#f0f5ed
+}
+.k b{
+ display:block;
+ font-size:24px;
+ margin-top:5px
+}
+.k span{font-size:12px;color:#666}
+
+nav{
+ position:fixed;
+ bottom:0;
+ left:0;
+ right:0;
+ background:#fff;
+ border-top:1px solid #ddd;
+ display:grid;
+ grid-template-columns:repeat(4,1fr);
+ z-index:10
+}
+nav button{
+ border:0;
+ background:#fff;
+ padding:10px 4px;
+ font-size:12px;
+ color:#555
+}
+nav button.active{
+ color:#19733a;
+ font-weight:700
+}
+
+.item{
+ border-top:1px solid #eee;
+ padding:12px 0
+}
+.item:first-child{border-top:0}
+
+.badge{
+ display:inline-block;
+ padding:4px 8px;
+ border-radius:999px;
+ background:#eef3ed;
+ font-size:11px
+}
+.blue{color:#1266d6}
+.yellow{color:#9a7200}
+
+.hidden{display:none}
+
+.login{
+ max-width:420px;
+ margin:50px auto
+}
+.login input{
+ width:100%;
+ padding:13px;
+ border:1px solid #ccc;
+ border-radius:10px;
+ margin:7px 0;
+ font-size:16px
+}
+
+input,select,textarea{
+ width:100%;
+ padding:12px;
+ border:1px solid #ccc;
+ border-radius:10px;
+ font-size:16px;
+ background:#fff;
+ margin-top:6px;
+ margin-bottom:10px
+}
+textarea{
+ min-height:90px;
+ resize:vertical
+}
+label{
+ font-size:13px;
+ font-weight:700
+}
+
+.primary,.secondary{
+ border:0;
+ border-radius:10px;
+ padding:11px 14px;
+ font-weight:700
+}
+.primary{
+ background:#19733a;
+ color:#fff
+}
+.secondary{
+ background:#eef3ed
+}
+.danger{
+ background:#fff0f0;
+ color:#b00020
+}
+
+.row{
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ gap:10px
+}
+.err{
+ color:#b00020;
+ font-size:13px;
+ margin-top:10px
+}
+.success{
+ color:#19733a;
+ font-size:13px;
+ margin-top:10px
+}
+
+.addbox{
+ background:#f7faf5;
+ border:1px solid #dce7d8;
+ border-radius:14px;
+ padding:14px;
+ margin-bottom:14px
+}
 </style>
 </head>
+
 <body>
-<header><h1>🌱 神田野菜マネージメント</h1><div class="sub">毎日開いたら、今日やることが一目で分かる農家アプリ</div></header>
-<div id="login" class="login card hidden"><h2>ログイン</h2><p class="muted">Supabaseに登録したメールアドレスとパスワードでログインします。</p><input id="email" type="email" placeholder="メールアドレス"><input id="password" type="password" placeholder="パスワード"><button class="primary" style="width:100%" onclick="login()">ログイン</button><div id="loginErr" class="err"></div></div>
+
+<header>
+<h1>🌱 神田野菜マネージメント</h1>
+<div class="sub">毎日開いたら、今日やることが一目で分かる農家アプリ</div>
+</header>
+
+<div id="login" class="login card hidden">
+<h2>ログイン</h2>
+<p class="muted">Supabaseに登録したメールアドレスとパスワードでログインします。</p>
+<input id="email" type="email" placeholder="メールアドレス">
+<input id="password" type="password" placeholder="パスワード">
+<button class="primary" style="width:100%" onclick="login()">ログイン</button>
+<div id="loginErr" class="err"></div>
+</div>
+
 <main id="app" class="hidden">
-<section id="home" class="page"><div class="card"><b>今日の神田野菜</b><div class="muted" id="today"></div></div>
-<div class="kpi"><div class="k"><span>圃場</span><b id="fieldCount">-</b></div><div class="k"><span>総面積</span><b id="area">-</b></div><div class="k"><span>栽培中</span><b id="plantingCount">-</b></div><div class="k"><span>今日の作業</span><b id="taskCount">-</b></div></div>
-<div class="card"><h3>🔵 今日やる</h3><div id="todayTasks">読み込み中…</div></div>
-<div class="card"><h3>🟡 次にやる</h3><div id="nextTasks">読み込み中…</div></div>
-<div class="card"><h3>🌱 栽培中</h3><div id="activePlantings"></div></div></section>
-<section id="fields" class="page hidden"><div class="card"><h2>📋 圃場一覧</h2><div id="fieldsList"></div></div></section>
-<section id="plantings" class="page hidden"><div class="card"><h2>🌱 作付け</h2><div id="plantingsList"></div></div></section>
-<section id="tasks" class="page hidden"><div class="card"><h2>🚜 作業</h2><div id="tasksList"></div></div></section>
+
+<!-- ホーム -->
+<section id="home" class="page">
+
+<div class="card">
+<b>今日の神田野菜</b>
+<div class="muted" id="today"></div>
+</div>
+
+<div class="kpi">
+<div class="k">
+<span>圃場</span>
+<b id="fieldCount">-</b>
+</div>
+
+<div class="k">
+<span>総面積</span>
+<b id="area">-</b>
+</div>
+
+<div class="k">
+<span>栽培中</span>
+<b id="plantingCount">-</b>
+</div>
+
+<div class="k">
+<span>今日の作業</span>
+<b id="taskCount">-</b>
+</div>
+</div>
+
+<div class="card">
+<h3>🔵 今日やる</h3>
+<div id="todayTasks">読み込み中…</div>
+</div>
+
+<div class="card">
+<h3>🟡 次にやる</h3>
+<div id="nextTasks">読み込み中…</div>
+</div>
+
+<div class="card">
+<h3>🌱 栽培中</h3>
+<div id="activePlantings"></div>
+</div>
+
+</section>
+
+
+<!-- 圃場 -->
+<section id="fields" class="page hidden">
+<div class="card">
+<h2>📋 圃場一覧</h2>
+<div id="fieldsList"></div>
+</div>
+</section>
+
+
+<!-- 作付け -->
+<section id="plantings" class="page hidden">
+<div class="card">
+<h2>🌱 作付け</h2>
+<div id="plantingsList"></div>
+</div>
+</section>
+
+
+<!-- 作業 -->
+<section id="tasks" class="page hidden">
+
+<div class="card">
+
+<div class="row">
+<h2 style="margin-bottom:0">🚜 作業</h2>
+<button class="primary" onclick="toggleAddTask()">＋ 作業追加</button>
+</div>
+
+</div>
+
+
+<!-- 作業追加フォーム -->
+<div id="addTaskBox" class="card addbox hidden">
+
+<h3>🚜 新しい作業を登録</h3>
+
+<label>📅 作業日</label>
+<input id="newTaskDate" type="date">
+
+<label>🚜 作業内容</label>
+<input id="newTaskName" type="text" placeholder="例：ニンジン播種">
+
+<label>📋 圃場</label>
+<select id="newTaskField">
+<option value="">圃場を選択してください</option>
+</select>
+
+<label>⭐ 優先度</label>
+<select id="newTaskPriority">
+<option value="今日やる">🔵 今日やる</option>
+<option value="次にやる">🟡 次にやる</option>
+</select>
+
+<label>📝 メモ</label>
+<textarea id="newTaskNotes" placeholder="肥料・数量・注意事項など"></textarea>
+
+<div class="row">
+<button class="secondary" onclick="toggleAddTask()">キャンセル</button>
+<button class="primary" onclick="addTask()">登録する</button>
+</div>
+
+<div id="addTaskMsg"></div>
+
+</div>
+
+
+<div class="card">
+<div id="tasksList"></div>
+</div>
+
+</section>
+
 </main>
-<nav id="nav" class="hidden"><button class="active" onclick="show('home',this)">🏠<br>ホーム</button><button onclick="show('fields',this)">📋<br>圃場</button><button onclick="show('plantings',this)">🌱<br>作付け</button><button onclick="show('tasks',this)">🚜<br>作業</button></nav>
+
+
+<nav id="nav" class="hidden">
+
+<button class="active" onclick="show('home',this)">
+🏠<br>ホーム
+</button>
+
+<button onclick="show('fields',this)">
+📋<br>圃場
+</button>
+
+<button onclick="show('plantings',this)">
+🌱<br>作付け
+</button>
+
+<button onclick="show('tasks',this)">
+🚜<br>作業
+</button>
+
+</nav>
+
+
 <script>
+
 const SUPABASE_URL="https://sujucntchbjltlhrqwzo.supabase.co";
 const SUPABASE_KEY="sb_publishable_t9Wvdir7C78pLiwj4Dvsyw_R4yGtPI9";
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const sb=supabase.createClient(
+ SUPABASE_URL,
+ SUPABASE_KEY
+);
+
 const $=id=>document.getElementById(id);
-$("today").textContent=new Date().toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
-async function init(){const {data:{session}}=await sb.auth.getSession();if(session)openApp();else $("login").classList.remove("hidden")}
-async function login(){ $("loginErr").textContent="";const {error}=await sb.auth.signInWithPassword({email:$("email").value,password:$("password").value});if(error){$("loginErr").textContent="ログインできませんでした。";return}openApp()}
-function openApp(){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("nav").classList.remove("hidden");loadAll()}
-function show(id,btn){document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));btn.classList.add("active")}
-async function loadAll(){
- const [f,p,t]=await Promise.all([sb.from("fields").select("*").order("id"),sb.from("crop_plantings").select("*").order("id",{ascending:false}),sb.from("farm_tasks").select("*").order("task_date",{ascending:true}).limit(100)]);
- const fields=f.data||[],plantings=p.data||[],tasks=t.data||[],today=new Date().toISOString().slice(0,10);
- $("fieldCount").textContent=fields.length;$("area").textContent=fields.reduce((s,x)=>s+Number(x.area_a||0),0).toFixed(2)+"a";$("plantingCount").textContent=plantings.filter(x=>x.status==="栽培中").length;
- const todayTs=tasks.filter(x=>x.task_date===today&&x.status!=="完了");$("taskCount").textContent=todayTs.length;
- renderFields(fields);renderPlantings(plantings,fields);renderTasks(tasks,fields);
- const active=plantings.filter(x=>x.status==="栽培中");$("activePlantings").innerHTML=active.length?active.map(x=>`<div class="item"><b>🌱 ${esc(x.crop_name)}</b>　${esc(x.variety||"")}<div class="muted">${fieldName(x.field_id,fields)}　${x.area_a||"-"}a</div></div>`).join(""):"<div class='muted'>現在、栽培中の作付けはありません。</div>";
- $("todayTasks").innerHTML=taskHtml(todayTs,fields,"blue");$("nextTasks").innerHTML=taskHtml(tasks.filter(x=>x.status!=="完了"&&x.task_date!==today).slice(0,8),fields,"yellow");
+
+
+/* 日本時間の日付 */
+function todayJP(){
+ const d=new Date();
+ const y=d.getFullYear();
+ const m=String(d.getMonth()+1).padStart(2,"0");
+ const day=String(d.getDate()).padStart(2,"0");
+ return `${y}-${m}-${day}`;
 }
-function renderFields(a){$("fieldsList").innerHTML=a.map(x=>`<div class="item"><b>${esc(x.field_name||"圃場")}</b><div class="muted">${x.area_a||0}a　土質:${esc(x.soil_type||"-")}　排水:${esc(x.drainage||"-")}</div>${x.animal_damage?`<div class="muted">🦌 獣害:${esc(x.animal_damage)}</div>`:""}</div>`).join("")}
-function renderPlantings(a,f){$("plantingsList").innerHTML=a.map(x=>`<div class="item"><b>🌱 ${esc(x.crop_name)}</b> ${esc(x.variety||"")} <span class="badge">${esc(x.status||"")}</span><div class="muted">${fieldName(x.field_id,f)}　${x.area_a||"-"}a　植付:${x.planting_date||"-"}　収穫予定:${x.expected_harvest_date||"-"}</div></div>`).join("")}
-function renderTasks(a,f){$("tasksList").innerHTML=a.length?a.map(x=>`<div class="item"><div class="row"><div><b>${esc(x.task_name)}</b><div class="muted">${x.task_date||"-"}　${fieldName(x.field_id,f)}　${esc(x.priority||"")}</div></div>${x.status!=="完了"?`<button class="secondary" onclick="done(${x.id})">完了</button>`:`<span>✅</span>`}</div></div>`).join(""):"<div class='muted'>作業はまだ登録されていません。</div>"}
-function taskHtml(a,f,c){return a.length?a.slice(0,8).map(x=>`<div class="item"><span class="${c}">●</span> <b>${esc(x.task_name)}</b><div class="muted">${x.task_date||"-"}　${fieldName(x.field_id,f)}</div></div>`).join(""):"<div class='muted'>今のところありません。</div>"}
-async function done(id){await sb.from("farm_tasks").update({status:"完了",completed_at:new Date().toISOString()}).eq("id",id);loadAll()}
-function fieldName(id,f){const x=f.find(v=>v.id===id);return x?x.field_name:"圃場未設定"}
-function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+
+
+/* 今日の日付表示 */
+$("today").textContent=new Date().toLocaleDateString(
+ "ja-JP",
+ {
+  year:"numeric",
+  month:"long",
+  day:"numeric",
+  weekday:"short"
+ }
+);
+
+
+/* 初期化 */
+async function init(){
+
+ const {
+  data:{session}
+ }=await sb.auth.getSession();
+
+ if(session){
+  openApp();
+ }else{
+  $("login").classList.remove("hidden");
+ }
+
+}
+
+
+/* ログイン */
+async function login(){
+
+ $("loginErr").textContent="";
+
+ const {error}=await sb.auth.signInWithPassword({
+  email:$("email").value,
+  password:$("password").value
+ });
+
+ if(error){
+  $("loginErr").textContent="ログインできませんでした。";
+  return;
+ }
+
+ openApp();
+
+}
+
+
+/* アプリ表示 */
+function openApp(){
+
+ $("login").classList.add("hidden");
+ $("app").classList.remove("hidden");
+ $("nav").classList.remove("hidden");
+
+ loadAll();
+
+}
+
+
+/* ページ切り替え */
+function show(id,btn){
+
+ document.querySelectorAll(".page")
+ .forEach(x=>x.classList.add("hidden"));
+
+ $(id).classList.remove("hidden");
+
+ document.querySelectorAll("nav button")
+ .forEach(x=>x.classList.remove("active"));
+
+ btn.classList.add("active");
+
+}
+
+
+/* 全データ読み込み */
+async function loadAll(){
+
+ const [
+  f,
+  p,
+  t
+ ]=await Promise.all([
+
+  sb.from("fields")
+  .select("*")
+  .order("id"),
+
+  sb.from("crop_plantings")
+  .select("*")
+  .order("id",{ascending:false}),
+
+  sb.from("farm_tasks")
+  .select("*")
+  .order("task_date",{ascending:true})
+  .limit(100)
+
+ ]);
+
+ const fields=f.data||[];
+ const plantings=p.data||[];
+ const tasks=t.data||[];
+
+ const today=todayJP();
+
+
+ /* KPI */
+ $("fieldCount").textContent=fields.length;
+
+ $("area").textContent=
+ fields.reduce(
+  (s,x)=>s+Number(x.area_a||0),
+  0
+ ).toFixed(2)+"a";
+
+ $("plantingCount").textContent=
+ plantings.filter(
+  x=>x.status==="栽培中"
+ ).length;
+
+
+ const todayTs=tasks.filter(
+  x=>x.task_date===today &&
+  x.status!=="完了"
+ );
+
+ $("taskCount").textContent=todayTs.length;
+
+
+ /* 各画面 */
+ renderFields(fields);
+
+ renderPlantings(
+  plantings,
+  fields
+ );
+
+ renderTasks(
+  tasks,
+  fields
+ );
+
+
+ /* 栽培中 */
+ const active=
+ plantings.filter(
+  x=>x.status==="栽培中"
+ );
+
+ $("activePlantings").innerHTML=
+ active.length
+ ?
+ active.map(x=>`
+
+ <div class="item">
+
+ <b>🌱 ${esc(x.crop_name)}</b>
+ ${esc(x.variety||"")}
+
+ <div class="muted">
+ ${fieldName(x.field_id,fields)}
+　${x.area_a||"-"}a
+ </div>
+
+ </div>
+
+ `).join("")
+ :
+ "<div class='muted'>現在、栽培中の作付けはありません。</div>";
+
+
+ /* 今日やる */
+ $("todayTasks").innerHTML=
+ taskHtml(
+  todayTs,
+  fields,
+  "blue"
+ );
+
+
+ /* 次にやる */
+ const next=
+ tasks
+ .filter(
+  x=>
+   x.status!=="完了" &&
+   x.task_date!==today
+ )
+ .sort(
+  (a,b)=>
+   String(a.task_date||"")
+   .localeCompare(String(b.task_date||""))
+ )
+ .slice(0,8);
+
+ $("nextTasks").innerHTML=
+ taskHtml(
+  next,
+  fields,
+  "yellow"
+ );
+
+
+ /* 圃場選択 */
+ fillFieldSelect(fields);
+
+}
+
+
+/* 圃場一覧 */
+function renderFields(a){
+
+ $("fieldsList").innerHTML=
+ a.map(x=>`
+
+ <div class="item">
+
+ <b>${esc(x.field_name||"圃場")}</b>
+
+ <div class="muted">
+ ${x.area_a||0}a
+　土質:${esc(x.soil_type||"-")}
+　排水:${esc(x.drainage||"-")}
+ </div>
+
+ ${
+  x.animal_damage
+  ?
+  `<div class="muted">
+  🦌 獣害:${esc(x.animal_damage)}
+  </div>`
+  :
+  ""
+ }
+
+ </div>
+
+ `).join("");
+
+}
+
+
+/* 作付け一覧 */
+function renderPlantings(a,f){
+
+ $("plantingsList").innerHTML=
+ a.length
+ ?
+ a.map(x=>`
+
+ <div class="item">
+
+ <b>🌱 ${esc(x.crop_name)}</b>
+ ${esc(x.variety||"")}
+
+ <span class="badge">
+ ${esc(x.status||"")}
+ </span>
+
+ <div class="muted">
+ ${fieldName(x.field_id,f)}
+　${x.area_a||"-"}a
+　植付:${x.planting_date||"-"}
+　収穫予定:${x.expected_harvest_date||"-"}
+ </div>
+
+ </div>
+
+ `).join("")
+ :
+ "<div class='muted'>作付けはまだ登録されていません。</div>";
+
+}
+
+
+/* 作業一覧 */
+function renderTasks(a,f){
+
+ $("tasksList").innerHTML=
+ a.length
+ ?
+ a.map(x=>`
+
+ <div class="item">
+
+ <div class="row">
+
+ <div style="flex:1">
+
+ <b>${esc(x.task_name)}</b>
+
+ <div class="muted">
+ ${x.task_date||"-"}
+　${fieldName(x.field_id,f)}
+　${esc(x.priority||"")}
+ </div>
+
+ ${
+  x.notes
+  ?
+  `<div class="muted">
+  📝 ${esc(x.notes)}
+  </div>`
+  :
+  ""
+ }
+
+ </div>
+
+ ${
+  x.status!=="完了"
+  ?
+  `<button class="secondary"
+  onclick="done(${x.id})">
+  完了
+  </button>`
+  :
+  `<span>✅</span>`
+ }
+
+ </div>
+
+ </div>
+
+ `).join("")
+ :
+ "<div class='muted'>作業はまだ登録されていません。</div>";
+
+}
+
+
+/* ホームの作業表示 */
+function taskHtml(a,f,c){
+
+ return a.length
+ ?
+ a.slice(0,8).map(x=>`
+
+ <div class="item">
+
+ <span class="${c}">●</span>
+
+ <b>${esc(x.task_name)}</b>
+
+ <div class="muted">
+ ${x.task_date||"-"}
+　${fieldName(x.field_id,f)}
+ </div>
+
+ </div>
+
+ `).join("")
+ :
+ "<div class='muted'>今のところありません。</div>";
+
+}
+
+
+/* 圃場選択肢 */
+function fillFieldSelect(fields){
+
+ const select=$("newTaskField");
+
+ const current=select.value;
+
+ select.innerHTML=
+ `<option value="">圃場を選択してください</option>`+
+ fields.map(x=>
+  `<option value="${x.id}">
+  ${esc(x.field_name||"圃場")}
+ 　${x.area_a||0}a
+  </option>`
+ ).join("");
+
+ if(current){
+  select.value=current;
+ }
+
+}
+
+
+/* 作業追加フォーム表示 */
+function toggleAddTask(){
+
+ const box=$("addTaskBox");
+
+ box.classList.toggle("hidden");
+
+ if(!box.classList.contains("hidden")){
+
+  $("newTaskDate").value=todayJP();
+
+  $("newTaskName").focus();
+
+  $("addTaskMsg").textContent="";
+
+ }
+
+}
+
+
+/* 作業登録 */
+async function addTask(){
+
+ const taskDate=$("newTaskDate").value;
+ const taskName=$("newTaskName").value.trim();
+ const fieldId=$("newTaskField").value;
+ const priority=$("newTaskPriority").value;
+ const notes=$("newTaskNotes").value.trim();
+
+ $("addTaskMsg").textContent="";
+
+
+ if(!taskName){
+
+  $("addTaskMsg").innerHTML=
+  "<div class='err'>作業内容を入力してください。</div>";
+
+  return;
+
+ }
+
+
+ const insertData={
+
+  task_date:taskDate||todayJP(),
+
+  field_id:
+   fieldId
+   ?
+   Number(fieldId)
+   :
+   null,
+
+  task_name:taskName,
+
+  priority:priority,
+
+  status:"未完了",
+
+  notes:notes||null
+
+ };
+
+
+ const {error}=await sb
+ .from("farm_tasks")
+ .insert(insertData);
+
+
+ if(error){
+
+  console.error(error);
+
+  $("addTaskMsg").innerHTML=
+  "<div class='err'>登録できませんでした。もう一度お試しください。</div>";
+
+  return;
+
+ }
+
+
+ /* 入力欄をリセット */
+ $("newTaskName").value="";
+ $("newTaskField").value="";
+ $("newTaskPriority").value="今日やる";
+ $("newTaskNotes").value="";
+
+ $("addTaskMsg").innerHTML=
+ "<div class='success'>✅ 作業を登録しました！</div>";
+
+
+ /* データ再読み込み */
+ await loadAll();
+
+
+ /* 少し待ってフォームを閉じる */
+ setTimeout(()=>{
+
+  $("addTaskBox").classList.add("hidden");
+  $("addTaskMsg").textContent="";
+
+ },700);
+
+}
+
+
+/* 作業完了 */
+async function done(id){
+
+ const {error}=await sb
+ .from("farm_tasks")
+ .update({
+  status:"完了",
+  completed_at:new Date().toISOString()
+ })
+ .eq("id",id);
+
+ if(error){
+
+  alert("完了処理に失敗しました。");
+
+  return;
+
+ }
+
+ loadAll();
+
+}
+
+
+/* 圃場名取得 */
+function fieldName(id,f){
+
+ const x=f.find(v=>v.id===id);
+
+ return x
+  ?
+  x.field_name
+  :
+  "圃場未設定";
+
+}
+
+
+/* HTMLエスケープ */
+function esc(v){
+
+ return String(v??"")
+ .replace(
+  /[&<>"']/g,
+  m=>({
+   "&":"&amp;",
+   "<":"&lt;",
+   ">":"&gt;",
+   '"':"&quot;",
+   "'":"&#039;"
+  }[m])
+ );
+
+}
+
+
+/* 起動 */
 init();
+
 </script>
+
 </body>
 </html>
