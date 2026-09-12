@@ -1,6 +1,10 @@
 <!doctype html>
 <html lang="ja">
 <head>
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="manifest" href="manifest.json">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>神田野菜マネージメント</title>
@@ -267,7 +271,12 @@ function renderTasks(){
 }
 function inventoryTotals(){
  const map={};
+ const seen=new Set();
  CACHE.moves.forEach(x=>{
+  // 同じ在庫移動が画面側で重複していても二重計上しない
+  const movementKey=x.id!=null?`id:${x.id}`:(x.movement_type+"|"+(x.source_id||"")+"|"+x.movement_date+"|"+x.crop_name+"|"+(x.variety||"")+"|"+x.quantity+"|"+(x.unit||"kg"));
+  if(seen.has(movementKey))return;
+  seen.add(movementKey);
   const key=[x.crop_name,x.variety||"",x.unit||"kg"].join("|");
   if(!map[key])map[key]={crop:x.crop_name,variety:x.variety||"",unit:x.unit||"kg",qty:0};
   const q=Number(x.quantity||0);
