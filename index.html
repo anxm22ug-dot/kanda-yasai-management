@@ -346,20 +346,37 @@ async function addHarvest(){
  }finally{if(btn)btn.disabled=false}
 }
 async function addSale(){
- const q=Number($("newSaleQty").value||0),price=Number($("newSalePrice").value||0);if(q<=0||price<0){setMsg("saleMsg","<div class='err'>数量と単価を入力してください。</div>");return}
- const productName=$("newSaleProduct").value.trim()||"販売";
- let productId=null;
- const existing=await sb.from("products").select("id").eq("product_name",productName).limit(1).maybeSingle();
- if(!existing.error&&existing.data)productId=existing.data.id;
- else{
-  const np=await sb.from("products").insert({product_name:productName,unit:"式",price_yen:price,active:true}).select().single();
-  if(np.error){console.error(np.error)}
-  else productId=np.data.id;
- }
- const saleDate=$("newSaleDate").value||todayJP();
- const s=await sb.from("sales").insert({sale_date:saleDate,product_id:productId,quantity:q,unit_price_yen:price,notes:$("newSaleNotes").value.trim()||null}).select().single();
- if(s.error){console.error(s.error);setMsg("saleMsg","<div class='err'>売上登録に失敗しました。</div>");return}
- setMsg("saleMsg","<div class='success'>✅ 売上を登録しました！</div>");$("newSaleProduct").value="";$("newSaleQty").value="";$("newSalePrice").value="";$("newSaleNotes").value="";await loadAll();
+ const btn=$("saleSubmit");if(btn&&btn.disabled)return;if(btn)btn.disabled=true;
+ try{
+  const q=Number($("newSaleQty").value||0),price=Number($("newSalePrice").value||0);if(q<=0||price<0){setMsg("saleMsg","<div class='err'>数量と単価を入力してください。</div>");return}
+  const productName=$("newSaleProduct").value.trim()||"販売";
+  let productId=null;
+  const existing=await sb.from("products").select("id").eq("product_name",productName).limit(1).maybeSingle();
+  if(!existing.error&&existing.data)productId=existing.data.id;
+  else{
+   const np=await sb.from("products").insert({product_name:productName,unit:"式",price_yen:price,active:true}).select().single();
+   if(np.error){console.error(np.error)}
+   else productId=np.data.id;
+  }
+  const saleDate=$("newSaleDate").value||todayJP();
+  const s=await sb.from("sales").insert({sale_date:saleDate,product_id:productId,quantity:q,unit_price_yen:price,notes:$("newSaleNotes").value.trim()||null}).select().single();
+  if(s.error){console.error(s.error);setMsg("saleMsg","<div class='err'>売上登録に失敗しました。</div>");return}
+
+  // 売上登録と同時に在庫を自動減算。商品名から現在庫の作物・品種を安全に照合する。
+  let invRows=inventoryTotals();
+  let candidates=invRows.filter(x=>productName===x.crop || productName.includes(x.crop));
+  const exact=candidates.filter(x=>x.variety && productName.includes(x.variety));
+  if(exact.length) candidates=exact;
+  if(candidates.length===1){
+   const item=candidates[0];
+   const mv=await sb.from("inventory_movements").insert({movement_date:saleDate,crop_name:item.crop,variety:item.variety||null,quantity:q,unit:item.unit,movement_type:"販売",source_id:s.data.id,notes:"売上登録から自動作成"});
+   if(mv.error){console.error(mv.error);setMsg("saleMsg","<div class='err'>売上は登録されましたが、在庫減算に失敗しました。</div>");await loadAll();return}
+   setMsg("saleMsg","<div class='success'>✅ 売上を登録し、在庫から自動減算しました！</div>");
+  }else{
+   setMsg("saleMsg","<div class='success'>✅ 売上を登録しました！<br>⚠️ 商品名から在庫を特定できなかったため、在庫は減算していません。</div>");
+  }
+  $("newSaleProduct").value="";$("newSaleQty").value="";$("newSalePrice").value="";$("newSaleNotes").value="";await loadAll();
+ }finally{if(btn)btn.disabled=false}
 }
 async function addExpense(){
  const item=$("newExpenseItem").value.trim(),amount=Number($("newExpenseAmount").value||0);if(!item||amount<=0){setMsg("expenseMsg","<div class='err'>内容と金額を入力してください。</div>");return}
