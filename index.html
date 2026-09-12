@@ -137,7 +137,7 @@ hr{border:0;border-top:1px solid #eee;margin:14px 0}
 </div>
 <label>等級</label><select id="newHarvestGrade"><option value="">指定なし</option><option>A</option><option>B</option><option>C</option></select>
 <label>メモ</label><textarea id="newHarvestNotes"></textarea>
-<div class="row"><button class="secondary" onclick="toggleBox('harvestBox')">キャンセル</button><button class="primary" onclick="addHarvest()">登録する</button></div>
+<div class="row"><button class="secondary" onclick="toggleBox('harvestBox')">キャンセル</button><button id="harvestSubmit" class="primary" onclick="addHarvest()">登録する</button></div>
 <div id="harvestMsg"></div>
 </div>
 <div class="card"><h3>🥕 現在庫</h3><div id="inventoryList"></div></div>
@@ -324,14 +324,17 @@ async function done(id){
  if(error){alert("完了処理に失敗しました。");return}await loadAll();
 }
 async function addHarvest(){
- const pid=$("newHarvestPlanting").value,q=Number($("newHarvestQty").value||0);if(!pid||q<=0){setMsg("harvestMsg","<div class='err'>作付けと数量を入力してください。</div>");return}
- const p=CACHE.plantings.find(x=>x.id===Number(pid));if(!p){setMsg("harvestMsg","<div class='err'>作付けが見つかりません。</div>");return}
- const payload={harvest_date:$("newHarvestDate").value||todayJP(),field_id:p.field_id,planting_id:p.id,crop_name:p.crop_name,variety:p.variety||null,quantity:q,unit:$("newHarvestUnit").value,grade:$("newHarvestGrade").value||null,notes:$("newHarvestNotes").value.trim()||null};
- const h=await sb.from("harvests").insert(payload).select().single();
- if(h.error){console.error(h.error);setMsg("harvestMsg","<div class='err'>収穫登録に失敗しました。</div>");return}
- const mv=await sb.from("inventory_movements").insert({movement_date:payload.harvest_date,crop_name:payload.crop_name,variety:payload.variety,quantity:q,unit:payload.unit,movement_type:"収穫",source_id:h.data.id,notes:"収穫登録から自動作成"});
- if(mv.error){console.error(mv.error);setMsg("harvestMsg","<div class='err'>収穫は登録されましたが、在庫反映に失敗しました。</div>");await loadAll();return}
- setMsg("harvestMsg","<div class='success'>✅ 収穫を登録し、在庫へ自動加算しました！</div>");$("newHarvestQty").value="";$("newHarvestNotes").value="";await loadAll();
+ const btn=$("harvestSubmit");if(btn&&btn.disabled)return;if(btn)btn.disabled=true;
+ try{
+  const pid=$("newHarvestPlanting").value,q=Number($("newHarvestQty").value||0);if(!pid||q<=0){setMsg("harvestMsg","<div class='err'>作付けと数量を入力してください。</div>");return}
+  const p=CACHE.plantings.find(x=>x.id===Number(pid));if(!p){setMsg("harvestMsg","<div class='err'>作付けが見つかりません。</div>");return}
+  const payload={harvest_date:$("newHarvestDate").value||todayJP(),field_id:p.field_id,planting_id:p.id,crop_name:p.crop_name,variety:p.variety||null,quantity:q,unit:$("newHarvestUnit").value,grade:$("newHarvestGrade").value||null,notes:$("newHarvestNotes").value.trim()||null};
+  const h=await sb.from("harvests").insert(payload).select().single();
+  if(h.error){console.error(h.error);setMsg("harvestMsg","<div class='err'>収穫登録に失敗しました。</div>");return}
+  const mv=await sb.from("inventory_movements").insert({movement_date:payload.harvest_date,crop_name:payload.crop_name,variety:payload.variety,quantity:q,unit:payload.unit,movement_type:"収穫",source_id:h.data.id,notes:"収穫登録から自動作成"});
+  if(mv.error){console.error(mv.error);setMsg("harvestMsg","<div class='err'>収穫は登録されましたが、在庫反映に失敗しました。</div>");await loadAll();return}
+  setMsg("harvestMsg","<div class='success'>✅ 収穫を登録し、在庫へ自動加算しました！</div>");$("newHarvestQty").value="";$("newHarvestNotes").value="";await loadAll();
+ }finally{if(btn)btn.disabled=false}
 }
 async function addSale(){
  const q=Number($("newSaleQty").value||0),price=Number($("newSalePrice").value||0);if(q<=0||price<0){setMsg("saleMsg","<div class='err'>数量と単価を入力してください。</div>");return}
