@@ -364,8 +364,12 @@ async function addSale(){
 
   // 売上登録と同時に在庫を自動減算。商品名から現在庫の作物・品種を安全に照合する。
   let invRows=inventoryTotals();
-  let candidates=invRows.filter(x=>productName===x.crop || productName.includes(x.crop));
-  const exact=candidates.filter(x=>x.variety && productName.includes(x.variety));
+  // 商品名は「アロマレッド」のように品種名だけでも在庫を特定できるようにする。
+  let candidates=invRows.filter(x=>
+   productName===x.crop || productName.includes(x.crop) ||
+   (x.variety && (productName===x.variety || productName.includes(x.variety)))
+  );
+  const exact=candidates.filter(x=>x.variety && (productName===x.variety || productName.includes(x.variety)));
   if(exact.length) candidates=exact;
   if(candidates.length===1){
    const item=candidates[0];
