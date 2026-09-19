@@ -373,8 +373,12 @@ async function addSale(){
   if(exact.length) candidates=exact;
   if(candidates.length===1){
    const item=candidates[0];
-   const mv=await sb.from("inventory_movements").insert({movement_date:saleDate,crop_name:item.crop,variety:item.variety||null,quantity:q,unit:item.unit,movement_type:"販売",source_id:s.data.id,notes:"売上登録から自動作成"});
-   if(mv.error){console.error(mv.error);setMsg("saleMsg","<div class='err'>売上は登録されましたが、在庫減算に失敗しました。</div>");await loadAll();return}
+   const already=await sb.from("inventory_movements").select("id").eq("movement_type","販売").eq("source_id",s.data.id).limit(1).maybeSingle();
+   if(already.error){console.error(already.error);setMsg("saleMsg","<div class='err'>在庫確認に失敗しました。</div>");await loadAll();return}
+   if(!already.data){
+    const mv=await sb.from("inventory_movements").insert({movement_date:saleDate,crop_name:item.crop,variety:item.variety||null,quantity:q,unit:item.unit,movement_type:"販売",source_id:s.data.id,notes:"売上登録から自動作成"});
+    if(mv.error){console.error(mv.error);setMsg("saleMsg","<div class='err'>売上は登録されましたが、在庫減算に失敗しました。</div>");await loadAll();return}
+   }
    setMsg("saleMsg","<div class='success'>✅ 売上を登録し、在庫から自動減算しました！</div>");
   }else{
    setMsg("saleMsg","<div class='success'>✅ 売上を登録しました！<br>⚠️ 商品名から在庫を特定できなかったため、在庫は減算していません。</div>");
