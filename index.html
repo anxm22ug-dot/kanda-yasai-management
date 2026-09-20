@@ -148,6 +148,33 @@ hr{border:0;border-top:1px solid #eee;margin:14px 0}
 <div class="card"><h3>収穫履歴</h3><div id="harvestList"></div></div>
 </section>
 
+<section id="orders" class="page hidden">
+<div class="card"><div class="sectionTitle"><h2>📦 注文・発送</h2><button class="primary" onclick="toggleBox('orderBox');fillOrderCustomers()">＋ 注文登録</button></div></div>
+<div id="orderBox" class="card addbox hidden">
+<h3>📦 注文を登録</h3>
+<label>注文日</label><input id="newOrderDate" type="date">
+<label>お客様名</label><input id="newOrderCustomer" placeholder="例：田中太郎">
+<div class="grid2">
+<div><label>連絡先</label><input id="newOrderPhone" placeholder="電話番号など"></div>
+<div><label>注文経路</label><select id="newOrderType"><option>LINE</option><option>Instagram</option><option>電話</option><option>対面</option><option>その他</option></select></div>
+</div>
+<label>商品名</label><input id="newOrderProduct" placeholder="例：アロマレッド">
+<div class="grid2">
+<div><label>数量</label><input id="newOrderQty" type="number" min="0" step="0.01"></div>
+<div><label>単価（円）</label><input id="newOrderPrice" type="number" min="0" step="1"></div>
+</div>
+<div class="grid2">
+<div><label>受取方法</label><select id="newOrderReceive"><option>発送</option><option>店頭受取</option><option>配達</option></select></div>
+<div><label>希望日</label><input id="newOrderRequested" type="date"></div>
+</div>
+<label>住所・発送先</label><input id="newOrderAddress" placeholder="発送の場合のみ入力"></input>
+<label>メモ</label><textarea id="newOrderNotes"></textarea>
+<div class="row"><button class="secondary" onclick="toggleBox('orderBox')">キャンセル</button><button id="orderSubmit" class="primary" onclick="addOrder()">登録する</button></div>
+<div id="orderMsg"></div>
+</div>
+<div class="card"><h3>📋 注文一覧</h3><div id="ordersList"></div></div>
+</section>
+
 <section id="money" class="page hidden">
 <div class="card"><div class="sectionTitle"><h2>💰 売上・経費</h2></div></div>
 <div class="card">
@@ -183,6 +210,7 @@ hr{border:0;border-top:1px solid #eee;margin:14px 0}
 <button onclick="show('plantings',this)">🌱<br>作付け</button>
 <button onclick="show('tasks',this)">🚜<br>作業</button>
 <button onclick="show('harvest',this)">🥕<br>収穫</button>
+<button onclick="show('orders',this)">📦<br>注文</button>
 <button onclick="show('money',this)">💰<br>収支</button>
 </nav>
 
@@ -191,7 +219,7 @@ const SUPABASE_URL="https://sujucntchbjltlhrqwzo.supabase.co";
 const SUPABASE_KEY="sb_publishable_t9Wvdir7C78pLiwj4Dvsyw_R4yGtPI9";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=id=>document.getElementById(id);
-let CACHE={fields:[],plantings:[],tasks:[],harvests:[],moves:[],sales:[],expenses:[]};
+let CACHE={fields:[],plantings:[],tasks:[],harvests:[],moves:[],sales:[],expenses:[],orders:[],customers:[],orderItems:[],products:[]};
 
 function todayJP(){return new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"});}
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
@@ -222,6 +250,7 @@ function show(id,btn){
  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
  btn.classList.add("active");
  if(id==="money")renderMoney();
+ if(id==="orders")renderOrders();
 }
 function toggleBox(id){$(id).classList.toggle("hidden");}
 function setDefaultTask(){$("newTaskDate").value=todayJP();$("newTaskName").focus();$("taskMsg").textContent="";fillTaskField();}
@@ -233,10 +262,14 @@ async function loadAll(){
   sb.from("harvests").select("*").order("harvest_date",{ascending:false}).limit(200),
   sb.from("inventory_movements").select("*").order("movement_date",{ascending:true}).limit(500),
   sb.from("sales").select("*").order("sale_date",{ascending:false}).limit(200),
-  sb.from("expenses").select("*").order("expense_date",{ascending:false}).limit(200)
+  sb.from("expenses").select("*").order("expense_date",{ascending:false}).limit(200),
+  sb.from("orders").select("*").order("order_date",{ascending:false}).limit(200),
+  sb.from("customers").select("*").order("id",{ascending:false}).limit(200),
+  sb.from("order_items").select("*").order("id",{ascending:false}).limit(500),
+  sb.from("products").select("*").order("id")
  ]);
  CACHE.fields=results[0].data||[];CACHE.plantings=results[1].data||[];CACHE.tasks=results[2].data||[];
- CACHE.harvests=results[3].data||[];CACHE.moves=results[4].data||[];CACHE.sales=results[5].data||[];CACHE.expenses=results[6].data||[];
+ CACHE.harvests=results[3].data||[];CACHE.moves=results[4].data||[];CACHE.sales=results[5].data||[];CACHE.expenses=results[6].data||[];CACHE.orders=results[7].data||[];CACHE.customers=results[8].data||[];CACHE.orderItems=results[9].data||[];CACHE.products=results[10].data||[];
  renderAll();
 }
 function renderAll(){
@@ -385,6 +418,55 @@ async function addSale(){
   }
   $("newSaleProduct").value="";$("newSaleQty").value="";$("newSalePrice").value="";$("newSaleNotes").value="";await loadAll();
  }finally{if(btn)btn.disabled=false}
+}
+function fillOrderCustomers(){
+  $("newOrderDate").value=todayJP();
+  $("newOrderRequested").value="";
+  $("newOrderCustomer").focus();
+}
+function renderOrders(){
+ const box=$("ordersList");if(!box)return;
+ if(!CACHE.orders.length){box.innerHTML='<p class="muted">まだ注文はありません。</p>';return}
+ box.innerHTML=CACHE.orders.map(o=>{
+   const c=CACHE.customers.find(x=>x.id===o.customer_id);
+   const items=CACHE.orderItems.filter(x=>x.order_id===o.id);
+   const names=items.map(x=>{const pr=CACHE.products.find(p=>p.id===x.product_id);return `${esc(pr?.product_name||"商品")} ${Number(x.quantity||0)}個`}).join(" / ");
+   const status=esc(o.status||"受付");
+   return `<div class="item"><b>📦 ${esc(c?.customer_name||"お客様未設定")}</b><br><span class="badge">${status}</span> <span>${esc(o.order_date||"")}</span><br>${names||"商品未設定"}<br><b>${yen(o.total_yen)}</b> ・ ${esc(o.receive_method||"発送")} ${o.requested_date?"・ 希望 "+esc(o.requested_date):""}<br>${c?.customer_type?"経路："+esc(c.customer_type):""}${o.shipping_address?"<br>発送先："+esc(o.shipping_address):""}${o.notes?"<br>📝 "+esc(o.notes):""}<div class="row" style="margin-top:8px"><button class="secondary" onclick="updateOrderStatus(${o.id},'発送準備中')">発送準備中</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送済')">発送済</button></div></div>`;
+ }).join('');
+}
+async function addOrder(){
+ const btn=$("orderSubmit");if(btn&&btn.disabled)return;if(btn)btn.disabled=true;
+ try{
+  const customerName=$("newOrderCustomer").value.trim(),product=$("newOrderProduct").value.trim();
+  const qty=Number($("newOrderQty").value||0),price=Number($("newOrderPrice").value||0);
+  if(!customerName||!product||qty<=0||price<0){setMsg("orderMsg","<div class='err'>お客様名・商品名・数量・単価を入力してください。</div>");return}
+  const type=$("newOrderType").value;
+  let customer=CACHE.customers.find(x=>x.customer_name===customerName);
+  if(!customer){
+   const cr=await sb.from("customers").insert({customer_name:customerName,customer_type:type,phone:$("newOrderPhone").value.trim()||null,address:$("newOrderAddress").value.trim()||null,notes:null}).select().single();
+   if(cr.error){console.error(cr.error);setMsg("orderMsg","<div class='err'>お客様登録に失敗しました。</div>");return} customer=cr.data;
+  }
+  let productRow=CACHE.products.find(x=>x.product_name===product);
+  if(!productRow){
+   const pr=await sb.from("products").insert({product_name:product,crop_name:product,unit:"式",price_yen:price,active:true}).select().single();
+   if(pr.error){console.error(pr.error);setMsg("orderMsg","<div class='err'>商品登録に失敗しました。</div>");return}
+   productRow=pr.data;
+  }
+  const total=qty*price;
+  const or=await sb.from("orders").insert({order_date:$("newOrderDate").value||todayJP(),customer_id:customer.id,status:"受付",total_yen:total,notes:$("newOrderNotes").value.trim()||null,receive_method:$("newOrderReceive").value,requested_date:$("newOrderRequested").value||null,shipping_address:$("newOrderAddress").value.trim()||null}).select().single();
+  if(or.error){console.error(or.error);setMsg("orderMsg","<div class='err'>注文登録に失敗しました。</div>");return}
+  const oi=await sb.from("order_items").insert({order_id:or.data.id,product_id:productRow.id,quantity:qty,unit_price_yen:price,subtotal_yen:total});
+  if(oi.error){console.error(oi.error);setMsg("orderMsg","<div class='err'>注文は登録されましたが、明細登録に失敗しました。</div>");await loadAll();return}
+  setMsg("orderMsg","<div class='success'>✅ 注文を登録しました！</div>");
+  ["newOrderCustomer","newOrderPhone","newOrderProduct","newOrderQty","newOrderPrice","newOrderAddress","newOrderNotes"].forEach(id=>$(id).value="");
+  $("newOrderRequested").value="";await loadAll();renderOrders();
+ }finally{if(btn)btn.disabled=false}
+}
+async function updateOrderStatus(id,status){
+ const payload={status};if(status==="発送済")payload.shipped_at=new Date().toISOString();
+ const r=await sb.from("orders").update(payload).eq("id",id);
+ if(r.error){alert("更新に失敗しました。");return}await loadAll();renderOrders();
 }
 async function addExpense(){
  const item=$("newExpenseItem").value.trim(),amount=Number($("newExpenseAmount").value||0);if(!item||amount<=0){setMsg("expenseMsg","<div class='err'>内容と金額を入力してください。</div>");return}
