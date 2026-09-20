@@ -462,15 +462,37 @@ function fillOrderCustomers(){
   $("newOrderRequested").value="";
   $("newOrderCustomer").focus();
 }
+function orderReservationStatus(orderId){
+ const active=CACHE.orders.filter(o=>!['発送済','キャンセル','取消'].includes(o.status)).sort((a,b)=>String(a.order_date||'').localeCompare(String(b.order_date||''))||Number(a.id)-Number(b.id));
+ const invMap={}; inventoryTotals().forEach(x=>invMap[[x.crop,x.variety||'',x.unit||'kg'].join('|')]=Number(x.qty||0));
+ const used={};
+ for(const o of active){
+  const items=CACHE.orderItems.filter(i=>i.order_id===o.id);
+  let shortage=0;
+  for(const i of items){
+   const pr=CACHE.products.find(p=>p.id===i.product_id); if(!pr)continue;
+   const inv=findInventoryForProduct(pr); if(!inv)continue;
+   const key=[inv.crop,inv.variety||'',inv.unit||'kg'].join('|');
+   const available=Math.max(0,(invMap[key]||0)-(used[key]||0));
+   const q=Number(i.quantity||0),allocated=Math.min(q,available);
+   used[key]=(used[key]||0)+allocated;
+   if(o.id===orderId) shortage+=Math.max(0,q-allocated);
+  }
+  if(o.id===orderId)return shortage>0?{waiting:true,shortage}:{waiting:false,shortage:0};
+ }
+ return {waiting:false,shortage:0};
+}
 function renderOrders(){
  const box=$("ordersList");if(!box)return;
  if(!CACHE.orders.length){box.innerHTML='<p class="muted">まだ注文はありません。</p>';return}
  box.innerHTML=CACHE.orders.map(o=>{
    const c=CACHE.customers.find(x=>x.id===o.customer_id);
    const items=CACHE.orderItems.filter(x=>x.order_id===o.id);
-   const names=items.map(x=>{const pr=CACHE.products.find(p=>p.id===x.product_id);return `${esc(pr?.product_name||"商品")} ${Number(x.quantity||0)}${esc(pr?.unit||"")}`}).join(" / ");
+   const names=items.map(x=>{const pr=CACHE.products.find(p=>p.id===x.product_id);return `${esc(pr?.product_name||"商品")} ${Number(x.quantity||0)}${esc(pr?.unit||"")}`}).join(" / \ ");
    const status=esc(o.status||"受付");
-   return `<div class="item"><b>📦 ${esc(c?.customer_name||"お客様未設定")}</b><br><span class="badge">${status}</span> <span>${esc(o.order_date||"")}</span><br>${names||"商品未設定"}<br><b>${yen(o.total_yen)}</b> ・ ${esc(o.receive_method||"発送")} ${o.requested_date?"・ 希望 "+esc(o.requested_date):""}<br>${c?.customer_type?"経路："+esc(c.customer_type):""}${o.shipping_address?"<br>発送先："+esc(o.shipping_address):""}${o.notes?"<br>📝 "+esc(o.notes):""}<div class="row" style="margin-top:8px"><button class="secondary" onclick="editOrder(${o.id})">✏️ 修正</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送準備中')">発送準備中</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送済')">発送済</button></div></div>`;
+   const rs=orderReservationStatus(o.id);
+   const reservation=rs.waiting?`<div style="margin-top:6px;color:#b00020;font-weight:700">🟡 予約待ち：${rs.shortage.toLocaleString("ja-JP")}（不足）</div>`:`<div style="margin-top:6px;color:#19733a;font-weight:700">🟢 予約確保済み</div>`;
+   return `<div class="item"><b>📦 ${esc(c?.customer_name||"お客様未設定")}</b><br><span class="badge">${status}</span> <span>${esc(o.order_date||"")}</span><br>${names||"商品未設定"}<br><b>${yen(o.total_yen)}</b> ・ ${esc(o.receive_method||"発送")} ${o.requested_date?"・ 希望 "+esc(o.requested_date):""}${reservation}<br>${c?.customer_type?"経路："+esc(c.customer_type):""}${o.shipping_address?"<br>発送先："+esc(o.shipping_address):""}${o.notes?"<br>📝 "+esc(o.notes):""}<div class="row" style="margin-top:8px"><button class="secondary" onclick="editOrder(${o.id})">✏️ 修正</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送準備中')">発送準備中</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送済')">発送済</button></div></div>`;
  }).join('');
 }
 async function editOrder(id){
@@ -510,13 +532,14 @@ async function addOrder(){
   const productRow=CACHE.products.find(x=>x.id===productId);
   if(!productRow){setMsg("orderMsg","<div class='err'>商品を選択してください。</div>");return}
   const total=qty*price;
-  // 注文受付時点で在庫を予約し、販売可能数を超える注文は登録しない
+  // 在庫が足りなくても注文を受け付け、「予約待ち」として管理する
   const matchedInv=findInventoryForProduct(productRow);
+  let shortageMsg="";
   if(matchedInv){
    const reserved=reservedTotals().find(x=>[x.crop,x.variety||"",x.unit||"kg"].join("|")===[matchedInv.crop,matchedInv.variety||"",matchedInv.unit||"kg"].join("|"));
    const reservedQty=reserved?.qty||0,available=Number(matchedInv.qty)-reservedQty;
    if(qty>available){
-    setMsg("orderMsg",`<div class='err'>⚠️ 在庫不足です。<br>実在庫：${matchedInv.qty}${esc(matchedInv.unit)}　予約中：${reservedQty}${esc(matchedInv.unit)}　販売可能：${available}${esc(matchedInv.unit)}<br>今回の注文：${qty}${esc(matchedInv.unit)}</div>`);return;
+    shortageMsg=`<br>🟡 在庫不足のため予約待ちで受付します。不足：${(qty-Math.max(0,available)).toLocaleString("ja-JP")} ${esc(matchedInv.unit)}`;
    }
   }
   const or=await sb.from("orders").insert({order_date:$("newOrderDate").value||todayJP(),customer_id:customer.id,status:"受付",total_yen:total,notes:$("newOrderNotes").value.trim()||null,receive_method:$("newOrderReceive").value,requested_date:$("newOrderRequested").value||null,shipping_address:$("newOrderAddress").value.trim()||null}).select().single();
@@ -540,7 +563,7 @@ async function addOrder(){
     }
    }
   }
-  setMsg("orderMsg","<div class='success'>✅ 注文と明細を登録しました！</div>");
+  setMsg("orderMsg",`<div class='success'>✅ 注文と明細を登録しました！${shortageMsg}</div>`);
   ["newOrderCustomer","newOrderPhone","newOrderProduct","newOrderQty","newOrderPrice","newOrderAddress","newOrderNotes"].forEach(id=>$(id).value="");
   $("newOrderRequested").value="";await loadAll();renderOrders();
  }finally{if(btn)btn.disabled=false}
