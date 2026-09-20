@@ -317,9 +317,42 @@ function inventoryTotals(){
  });
  return Object.values(map).filter(x=>Math.abs(x.qty)>0.00001);
 }
+function reservedTotals(){
+ const map={};
+ CACHE.orders.filter(o=>!['発送済','キャンセル','取消'].includes(o.status)).forEach(o=>{
+  CACHE.orderItems.filter(i=>i.order_id===o.id).forEach(i=>{
+   const pr=CACHE.products.find(p=>p.id===i.product_id);
+   if(!pr)return;
+   const name=pr.product_name||pr.crop_name||"";
+   const inv=inventoryTotals().filter(x=>{
+    const pn=name;
+    return pn===x.crop||pn===x.variety||pn.includes(x.crop)||x.crop.includes(pn)||(x.variety&&(pn.includes(x.variety)||x.variety.includes(pn)));
+   });
+   if(inv.length===1){
+    const x=inv[0],key=[x.crop,x.variety||"",x.unit||"kg"].join("|");
+    if(!map[key])map[key]={crop:x.crop,variety:x.variety||"",unit:x.unit||"kg",qty:0};
+    map[key].qty+=Number(i.quantity||0);
+   }
+  });
+ });
+ return Object.values(map);
+}
+function findInventoryForProduct(pr){
+ if(!pr)return null;
+ const name=pr.product_name||pr.crop_name||"";
+ const inv=inventoryTotals().filter(x=>name===x.crop||name===x.variety||name.includes(x.crop)||x.crop.includes(name)||(x.variety&&(name.includes(x.variety)||x.variety.includes(name))));
+ if(inv.length===1)return inv[0];
+ return null;
+}
 function renderInventory(){
  const inv=inventoryTotals();
- const html=inv.length?inv.map(x=>`<div class="item"><b>🥕 ${esc(x.crop)}</b> ${esc(x.variety)}<div class="muted">${x.qty.toLocaleString("ja-JP")} ${esc(x.unit)}</div></div>`).join(""):"<div class='muted'>在庫はまだありません。</div>";
+ const res=reservedTotals();
+ const html=inv.length?inv.map(x=>{
+  const key=[x.crop,x.variety||"",x.unit||"kg"].join("|");
+  const r=res.find(v=>[v.crop,v.variety||"",v.unit||"kg"].join("|")===key);
+  const reserved=r?.qty||0,available=x.qty-reserved;
+  return `<div class="item"><b>🥕 ${esc(x.crop)}</b> ${esc(x.variety)}<div class="muted">実在庫：${x.qty.toLocaleString("ja-JP")} ${esc(x.unit)}　予約中：${reserved.toLocaleString("ja-JP")} ${esc(x.unit)}　<b>販売可能：${available.toLocaleString("ja-JP")} ${esc(x.unit)}</b></div></div>`;
+ }).join(""):"<div class='muted'>在庫はまだありません。</div>";
  $("inventoryList").innerHTML=html;$("homeInventory").innerHTML=html;
 }
 function renderHarvests(){
@@ -454,6 +487,15 @@ async function addOrder(){
    productRow=pr.data;
   }
   const total=qty*price;
+  // 注文受付時点で在庫を予約し、販売可能数を超える注文は登録しない
+  const matchedInv=findInventoryForProduct(productRow);
+  if(matchedInv){
+   const reserved=reservedTotals().find(x=>[x.crop,x.variety||"",x.unit||"kg"].join("|")===[matchedInv.crop,matchedInv.variety||"",matchedInv.unit||"kg"].join("|"));
+   const reservedQty=reserved?.qty||0,available=Number(matchedInv.qty)-reservedQty;
+   if(qty>available){
+    setMsg("orderMsg",`<div class='err'>⚠️ 在庫不足です。<br>実在庫：${matchedInv.qty}${esc(matchedInv.unit)}　予約中：${reservedQty}${esc(matchedInv.unit)}　販売可能：${available}${esc(matchedInv.unit)}<br>今回の注文：${qty}${esc(matchedInv.unit)}</div>`);return;
+   }
+  }
   const or=await sb.from("orders").insert({order_date:$("newOrderDate").value||todayJP(),customer_id:customer.id,status:"受付",total_yen:total,notes:$("newOrderNotes").value.trim()||null,receive_method:$("newOrderReceive").value,requested_date:$("newOrderRequested").value||null,shipping_address:$("newOrderAddress").value.trim()||null}).select().single();
   if(or.error){console.error(or.error);setMsg("orderMsg","<div class='err'>注文登録に失敗しました。</div>");return}
   // 注文明細は、同じ注文に既に明細がある場合は重複登録しない
@@ -481,9 +523,28 @@ async function addOrder(){
  }finally{if(btn)btn.disabled=false}
 }
 async function updateOrderStatus(id,status){
- const payload={status};if(status==="発送済")payload.shipped_at=new Date().toISOString();
+ const payload={status};
+ if(status==="発送済"){
+  payload.shipped_at=new Date().toISOString();
+  // 発送済にした時点で在庫を自動減算。重複クリックでも二重減算しない。
+  const items=await sb.from("order_items").select("*").eq("order_id",id);
+  if(items.error){alert("注文は更新されましたが、明細の取得に失敗しました。");return}
+  for(const item of (items.data||[])){
+   const already=await sb.from("inventory_movements").select("id").eq("movement_type","販売").eq("source_id",id).eq("notes",`注文発送: ${item.id}`).limit(1).maybeSingle();
+   if(already.error){alert("在庫確認に失敗しました。");return}
+   if(!already.data){
+    const pr=CACHE.products.find(x=>x.id===item.product_id);
+    const inv=findInventoryForProduct(pr);
+    if(pr&&inv){
+     const mv=await sb.from("inventory_movements").insert({movement_date:todayJP(),crop_name:inv.crop,variety:inv.variety||null,quantity:Number(item.quantity||0),unit:inv.unit||pr.unit||"kg",movement_type:"販売",source_id:id,notes:`注文発送: ${item.id}`});
+     if(mv.error){console.error(mv.error);alert("発送状態は更新されましたが、在庫減算に失敗しました。");return}
+    }
+   }
+  }
+ }
  const r=await sb.from("orders").update(payload).eq("id",id);
- if(r.error){alert("更新に失敗しました。");return}await loadAll();renderOrders();
+ if(r.error){alert("更新に失敗しました。");return}
+ await loadAll();renderOrders();
 }
 async function addExpense(){
  const item=$("newExpenseItem").value.trim(),amount=Number($("newExpenseAmount").value||0);if(!item||amount<=0){setMsg("expenseMsg","<div class='err'>内容と金額を入力してください。</div>");return}
