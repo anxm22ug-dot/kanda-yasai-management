@@ -158,7 +158,7 @@ hr{border:0;border-top:1px solid #eee;margin:14px 0}
 <div><label>連絡先</label><input id="newOrderPhone" placeholder="電話番号など"></div>
 <div><label>注文経路</label><select id="newOrderType"><option>LINE</option><option>Instagram</option><option>電話</option><option>対面</option><option>その他</option></select></div>
 </div>
-<label>商品名</label><input id="newOrderProduct" placeholder="例：アロマレッド">
+<label>商品名</label><select id="newOrderProduct"><option value="">商品を選択してください</option></select>
 <div class="grid2">
 <div><label>数量</label><input id="newOrderQty" type="number" min="0" step="0.01"></div>
 <div><label>単価（円）</label><input id="newOrderPrice" type="number" min="0" step="1"></div>
@@ -283,7 +283,7 @@ function renderAll(){
  $("nextTasks").innerHTML=taskHtml(t.filter(x=>x.status!=="完了"&&x.task_date!==todayJP()).sort((a,b)=>String(a.task_date||"").localeCompare(String(b.task_date||""))).slice(0,8),"yellow");
  const active=p.filter(x=>x.status==="栽培中");
  $("activePlantings").innerHTML=active.length?active.map(x=>`<div class="item"><b>🌱 ${esc(x.crop_name)}</b> ${esc(x.variety||"")}<div class="muted">${fieldName(x.field_id)}　${x.area_a||"-"}a</div></div>`).join(""):"<div class='muted'>現在、栽培中の作付けはありません。</div>";
- renderFields();renderPlantings();renderTasks();renderInventory();renderHarvests();renderMoney();fillTaskField();
+ renderFields();renderPlantings();renderTasks();renderInventory();renderHarvests();renderMoney();fillTaskField();fillOrderProducts();
  const ms=monthStart();
  const sales=CACHE.sales.filter(x=>x.sale_date>=ms).reduce((s,x)=>s+Number(x.total_yen||0),0);
  const expenses=CACHE.expenses.filter(x=>x.expense_date>=ms).reduce((s,x)=>s+Number(x.amount_yen||0),0);
@@ -452,7 +452,12 @@ async function addSale(){
   $("newSaleProduct").value="";$("newSaleQty").value="";$("newSalePrice").value="";$("newSaleNotes").value="";await loadAll();
  }finally{if(btn)btn.disabled=false}
 }
+function fillOrderProducts(){
+ const el=$("newOrderProduct"); if(!el)return;
+ el.innerHTML='<option value="">商品を選択してください</option>'+CACHE.products.filter(x=>x.active!==false).map(x=>`<option value="${x.id}">${esc(x.product_name||x.crop_name||"商品")}（${esc(x.unit||"")}）</option>`).join("");
+}
 function fillOrderCustomers(){
+  fillOrderProducts();
   $("newOrderDate").value=todayJP();
   $("newOrderRequested").value="";
   $("newOrderCustomer").focus();
@@ -463,29 +468,47 @@ function renderOrders(){
  box.innerHTML=CACHE.orders.map(o=>{
    const c=CACHE.customers.find(x=>x.id===o.customer_id);
    const items=CACHE.orderItems.filter(x=>x.order_id===o.id);
-   const names=items.map(x=>{const pr=CACHE.products.find(p=>p.id===x.product_id);return `${esc(pr?.product_name||"商品")} ${Number(x.quantity||0)}個`}).join(" / ");
+   const names=items.map(x=>{const pr=CACHE.products.find(p=>p.id===x.product_id);return `${esc(pr?.product_name||"商品")} ${Number(x.quantity||0)}${esc(pr?.unit||"")}`}).join(" / ");
    const status=esc(o.status||"受付");
-   return `<div class="item"><b>📦 ${esc(c?.customer_name||"お客様未設定")}</b><br><span class="badge">${status}</span> <span>${esc(o.order_date||"")}</span><br>${names||"商品未設定"}<br><b>${yen(o.total_yen)}</b> ・ ${esc(o.receive_method||"発送")} ${o.requested_date?"・ 希望 "+esc(o.requested_date):""}<br>${c?.customer_type?"経路："+esc(c.customer_type):""}${o.shipping_address?"<br>発送先："+esc(o.shipping_address):""}${o.notes?"<br>📝 "+esc(o.notes):""}<div class="row" style="margin-top:8px"><button class="secondary" onclick="updateOrderStatus(${o.id},'発送準備中')">発送準備中</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送済')">発送済</button></div></div>`;
+   return `<div class="item"><b>📦 ${esc(c?.customer_name||"お客様未設定")}</b><br><span class="badge">${status}</span> <span>${esc(o.order_date||"")}</span><br>${names||"商品未設定"}<br><b>${yen(o.total_yen)}</b> ・ ${esc(o.receive_method||"発送")} ${o.requested_date?"・ 希望 "+esc(o.requested_date):""}<br>${c?.customer_type?"経路："+esc(c.customer_type):""}${o.shipping_address?"<br>発送先："+esc(o.shipping_address):""}${o.notes?"<br>📝 "+esc(o.notes):""}<div class="row" style="margin-top:8px"><button class="secondary" onclick="editOrder(${o.id})">✏️ 修正</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送準備中')">発送準備中</button><button class="secondary" onclick="updateOrderStatus(${o.id},'発送済')">発送済</button></div></div>`;
  }).join('');
+}
+async function editOrder(id){
+ const o=CACHE.orders.find(x=>x.id===id); if(!o)return;
+ const item=CACHE.orderItems.find(x=>x.order_id===id); if(!item){alert("この注文には明細がありません。修正できません。");return}
+ const pr=CACHE.products.find(x=>x.id===item.product_id);
+ const productName=prompt("商品名を入力してください（例：里芋）",pr?.product_name||""); if(productName===null)return;
+ const productRow=CACHE.products.find(x=>(x.product_name||"").trim()===productName.trim() || (x.crop_name||"").trim()===productName.trim());
+ if(!productRow){alert("登録済みの商品名から選んでください。\n現在の商品："+CACHE.products.map(x=>x.product_name).join("、"));return}
+ const qtyText=prompt("数量を入力してください",String(item.quantity||0)); if(qtyText===null)return;
+ const qty=Number(qtyText); if(!(qty>0)){alert("数量は0より大きい数字にしてください。");return}
+ const priceText=prompt("単価（円）を入力してください",String(item.unit_price_yen||0)); if(priceText===null)return;
+ const price=Number(priceText); if(!(price>=0)){alert("単価を確認してください。");return}
+ const requested=prompt("希望日（YYYY-MM-DD）",o.requested_date||""); if(requested===null)return;
+ const receive=prompt("受取方法（発送 / 店頭受取 / 配達）",o.receive_method||"発送"); if(receive===null)return;
+ const address=prompt("住所・発送先",o.shipping_address||""); if(address===null)return;
+ const notes=prompt("メモ",o.notes||""); if(notes===null)return;
+ const r1=await sb.from("order_items").update({product_id:productRow.id,quantity:qty,unit_price_yen:price}).eq("id",item.id);
+ if(r1.error){console.error(r1.error);alert("明細の修正に失敗しました。");return}
+ const r2=await sb.from("orders").update({total_yen:qty*price,requested_date:requested||null,receive_method:receive,shipping_address:address||null,notes:notes||null}).eq("id",id);
+ if(r2.error){console.error(r2.error);alert("注文情報の修正に失敗しました。");return}
+ await loadAll();renderOrders();
+ alert("✅ 注文を修正しました。");
 }
 async function addOrder(){
  const btn=$("orderSubmit");if(btn&&btn.disabled)return;if(btn)btn.disabled=true;
  try{
-  const customerName=$("newOrderCustomer").value.trim(),product=$("newOrderProduct").value.trim();
+  const customerName=$("newOrderCustomer").value.trim(),productId=Number($("newOrderProduct").value||0);
   const qty=Number($("newOrderQty").value||0),price=Number($("newOrderPrice").value||0);
-  if(!customerName||!product||qty<=0||price<0){setMsg("orderMsg","<div class='err'>お客様名・商品名・数量・単価を入力してください。</div>");return}
+  if(!customerName||!productId||qty<=0||price<0){setMsg("orderMsg","<div class='err'>お客様名・商品名・数量・単価を入力してください。</div>");return}
   const type=$("newOrderType").value;
   let customer=CACHE.customers.find(x=>x.customer_name===customerName);
   if(!customer){
    const cr=await sb.from("customers").insert({customer_name:customerName,customer_type:type,phone:$("newOrderPhone").value.trim()||null,address:$("newOrderAddress").value.trim()||null,notes:null}).select().single();
    if(cr.error){console.error(cr.error);setMsg("orderMsg","<div class='err'>お客様登録に失敗しました。</div>");return} customer=cr.data;
   }
-  let productRow=CACHE.products.find(x=>x.product_name===product);
-  if(!productRow){
-   const pr=await sb.from("products").insert({product_name:product,crop_name:product,unit:"式",price_yen:price,active:true}).select().single();
-   if(pr.error){console.error(pr.error);setMsg("orderMsg","<div class='err'>商品登録に失敗しました。</div>");return}
-   productRow=pr.data;
-  }
+  const productRow=CACHE.products.find(x=>x.id===productId);
+  if(!productRow){setMsg("orderMsg","<div class='err'>商品を選択してください。</div>");return}
   const total=qty*price;
   // 注文受付時点で在庫を予約し、販売可能数を超える注文は登録しない
   const matchedInv=findInventoryForProduct(productRow);
