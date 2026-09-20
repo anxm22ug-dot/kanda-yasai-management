@@ -456,9 +456,26 @@ async function addOrder(){
   const total=qty*price;
   const or=await sb.from("orders").insert({order_date:$("newOrderDate").value||todayJP(),customer_id:customer.id,status:"受付",total_yen:total,notes:$("newOrderNotes").value.trim()||null,receive_method:$("newOrderReceive").value,requested_date:$("newOrderRequested").value||null,shipping_address:$("newOrderAddress").value.trim()||null}).select().single();
   if(or.error){console.error(or.error);setMsg("orderMsg","<div class='err'>注文登録に失敗しました。</div>");return}
-  const oi=await sb.from("order_items").insert({order_id:or.data.id,product_id:productRow.id,quantity:qty,unit_price_yen:price,subtotal_yen:total});
-  if(oi.error){console.error(oi.error);setMsg("orderMsg","<div class='err'>注文は登録されましたが、明細登録に失敗しました。</div>");await loadAll();return}
-  setMsg("orderMsg","<div class='success'>✅ 注文を登録しました！</div>");
+  // 注文明細は、同じ注文に既に明細がある場合は重複登録しない
+  const existingItem=await sb.from("order_items").select("id").eq("order_id",or.data.id).limit(1);
+  if(existingItem.error){
+   console.error(existingItem.error);
+   setMsg("orderMsg","<div class='err'>注文は登録されましたが、明細確認に失敗しました。もう一度ご確認ください。</div>");
+   await loadAll();return;
+  }
+  if(!existingItem.data?.length){
+   const oi=await sb.from("order_items").insert({order_id:or.data.id,product_id:productRow.id,quantity:qty,unit_price_yen:price});
+   if(oi.error){
+    console.error(oi.error);
+    // 一時的な通信エラー等を考慮して1回だけ再確認
+    const retry=await sb.from("order_items").select("id").eq("order_id",or.data.id).limit(1);
+    if(retry.error||!retry.data?.length){
+     setMsg("orderMsg","<div class='err'>注文は登録されましたが、明細登録に失敗しました。もう一度お試しください。</div>");
+     await loadAll();return;
+    }
+   }
+  }
+  setMsg("orderMsg","<div class='success'>✅ 注文と明細を登録しました！</div>");
   ["newOrderCustomer","newOrderPhone","newOrderProduct","newOrderQty","newOrderPrice","newOrderAddress","newOrderNotes"].forEach(id=>$(id).value="");
   $("newOrderRequested").value="";await loadAll();renderOrders();
  }finally{if(btn)btn.disabled=false}
