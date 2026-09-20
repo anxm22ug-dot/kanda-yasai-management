@@ -317,22 +317,23 @@ function inventoryTotals(){
  });
  return Object.values(map).filter(x=>Math.abs(x.qty)>0.00001);
 }
+function inventoryKeyForProduct(pr){
+ const inv=findInventoryForProduct(pr);
+ if(inv)return [inv.crop,inv.variety||"",inv.unit||pr?.unit||"kg"].join("|");
+ const crop=(pr?.crop_name||pr?.product_name||"").trim();
+ return [crop,"",pr?.unit||"kg"].join("|");
+}
 function reservedTotals(){
  const map={};
  CACHE.orders.filter(o=>!['発送済','キャンセル','取消'].includes(o.status)).forEach(o=>{
   CACHE.orderItems.filter(i=>i.order_id===o.id).forEach(i=>{
-   const pr=CACHE.products.find(p=>p.id===i.product_id);
-   if(!pr)return;
-   const name=pr.product_name||pr.crop_name||"";
-   const inv=inventoryTotals().filter(x=>{
-    const pn=name;
-    return pn===x.crop||pn===x.variety||pn.includes(x.crop)||x.crop.includes(pn)||(x.variety&&(pn.includes(x.variety)||x.variety.includes(pn)));
-   });
-   if(inv.length===1){
-    const x=inv[0],key=[x.crop,x.variety||"",x.unit||"kg"].join("|");
-    if(!map[key])map[key]={crop:x.crop,variety:x.variety||"",unit:x.unit||"kg",qty:0};
-    map[key].qty+=Number(i.quantity||0);
+   const pr=CACHE.products.find(p=>p.id===i.product_id); if(!pr)return;
+   const key=inventoryKeyForProduct(pr);
+   if(!map[key]){
+    const inv=findInventoryForProduct(pr);
+    map[key]={crop:inv?.crop||(pr.crop_name||pr.product_name||"商品"),variety:inv?.variety||"",unit:inv?.unit||pr.unit||"kg",qty:0};
    }
+   map[key].qty+=Number(i.quantity||0);
   });
  });
  return Object.values(map);
@@ -347,11 +348,21 @@ function findInventoryForProduct(pr){
 function renderInventory(){
  const inv=inventoryTotals();
  const res=reservedTotals();
- const html=inv.length?inv.map(x=>{
+ const rows={};
+ inv.forEach(x=>{
+  const key=[x.crop,x.variety||"",x.unit||"kg"].join("|");
+  rows[key]={crop:x.crop,variety:x.variety||"",unit:x.unit||"kg",qty:Number(x.qty||0)};
+ });
+ res.forEach(x=>{
+  const key=[x.crop,x.variety||"",x.unit||"kg"].join("|");
+  if(!rows[key])rows[key]={crop:x.crop,variety:x.variety||"",unit:x.unit||"kg",qty:0};
+ });
+ const html=Object.values(rows).length?Object.values(rows).map(x=>{
   const key=[x.crop,x.variety||"",x.unit||"kg"].join("|");
   const r=res.find(v=>[v.crop,v.variety||"",v.unit||"kg"].join("|")===key);
   const reserved=r?.qty||0,available=x.qty-reserved;
-  return `<div class="item"><b>🥕 ${esc(x.crop)}</b> ${esc(x.variety)}<div class="muted">実在庫：${x.qty.toLocaleString("ja-JP")} ${esc(x.unit)}　予約中：${reserved.toLocaleString("ja-JP")} ${esc(x.unit)}　<b>販売可能：${available.toLocaleString("ja-JP")} ${esc(x.unit)}</b></div></div>`;
+  const waiting=available<0;
+  return `<div class="item"><b>🥕 ${esc(x.crop)}</b> ${esc(x.variety)}<div class="muted">実在庫：${x.qty.toLocaleString("ja-JP")} ${esc(x.unit)}　予約中：${reserved.toLocaleString("ja-JP")} ${esc(x.unit)}　<b>販売可能：${Math.max(0,available).toLocaleString("ja-JP")} ${esc(x.unit)}</b></div>${waiting?`<div style="color:#b00020;font-weight:700">🟡 予約待ち：${Math.abs(available).toLocaleString("ja-JP")} ${esc(x.unit)} 不足</div>`:""}</div>`;
  }).join(""):"<div class='muted'>在庫はまだありません。</div>";
  $("inventoryList").innerHTML=html;$("homeInventory").innerHTML=html;
 }
@@ -471,14 +482,13 @@ function orderReservationStatus(orderId){
   let shortage=0;
   for(const i of items){
    const pr=CACHE.products.find(p=>p.id===i.product_id); if(!pr)continue;
-   const inv=findInventoryForProduct(pr); if(!inv)continue;
-   const key=[inv.crop,inv.variety||'',inv.unit||'kg'].join('|');
+   const key=inventoryKeyForProduct(pr);
    const available=Math.max(0,(invMap[key]||0)-(used[key]||0));
    const q=Number(i.quantity||0),allocated=Math.min(q,available);
    used[key]=(used[key]||0)+allocated;
    if(o.id===orderId) shortage+=Math.max(0,q-allocated);
   }
-  if(o.id===orderId)return shortage>0?{waiting:true,shortage}:{waiting:false,shortage:0};
+  if(o.id===orderId)return {waiting:shortage>0,shortage};
  }
  return {waiting:false,shortage:0};
 }
@@ -535,12 +545,14 @@ async function addOrder(){
   // 在庫が足りなくても注文を受け付け、「予約待ち」として管理する
   const matchedInv=findInventoryForProduct(productRow);
   let shortageMsg="";
-  if(matchedInv){
-   const reserved=reservedTotals().find(x=>[x.crop,x.variety||"",x.unit||"kg"].join("|")===[matchedInv.crop,matchedInv.variety||"",matchedInv.unit||"kg"].join("|"));
-   const reservedQty=reserved?.qty||0,available=Number(matchedInv.qty)-reservedQty;
-   if(qty>available){
-    shortageMsg=`<br>🟡 在庫不足のため予約待ちで受付します。不足：${(qty-Math.max(0,available)).toLocaleString("ja-JP")} ${esc(matchedInv.unit)}`;
-   }
+  const reservationKey=inventoryKeyForProduct(productRow);
+  const reserved=reservedTotals().find(x=>[x.crop,x.variety||"",x.unit||"kg"].join("|")===reservationKey);
+  const reservedQty=reserved?.qty||0;
+  const actualQty=matchedInv?Number(matchedInv.qty):0;
+  const available=actualQty-reservedQty;
+  if(qty>Math.max(0,available)){
+   const shortage=Math.max(0,qty-Math.max(0,available));
+   shortageMsg=`<br>🟡 在庫不足のため予約待ちで受付します。不足：${shortage.toLocaleString("ja-JP")} ${esc(productRow.unit||"kg")}`;
   }
   const or=await sb.from("orders").insert({order_date:$("newOrderDate").value||todayJP(),customer_id:customer.id,status:"受付",total_yen:total,notes:$("newOrderNotes").value.trim()||null,receive_method:$("newOrderReceive").value,requested_date:$("newOrderRequested").value||null,shipping_address:$("newOrderAddress").value.trim()||null}).select().single();
   if(or.error){console.error(or.error);setMsg("orderMsg","<div class='err'>注文登録に失敗しました。</div>");return}
