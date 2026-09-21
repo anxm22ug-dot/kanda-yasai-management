@@ -251,6 +251,7 @@ function show(id,btn){
  btn.classList.add("active");
  if(id==="money")renderMoney();
  if(id==="orders")renderOrders();
+ if(id==="harvest")fillHarvestSelects();
 }
 function toggleBox(id){$(id).classList.toggle("hidden");}
 function setDefaultTask(){$("newTaskDate").value=todayJP();$("newTaskName").focus();$("taskMsg").textContent="";fillTaskField();}
