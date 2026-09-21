@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="manifest" href="manifest.json">
-<title>神田野菜マネージメント v9</title>
+<title>神田野菜マネージメント v10</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f7f2;color:#243024;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
@@ -70,6 +70,7 @@ label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1
 <div class="grid2"><div><label>植付・播種日</label><input id="newPlantDate" type="date"></div><div><label>収穫予定日</label><input id="newPlantHarvest" type="date"></div></div>
 <label>メモ</label><textarea id="newPlantNotes"></textarea><input id="editPlantingId" type="hidden"><button id="plantingSaveBtn" class="primary" onclick="savePlanting()">登録</button><button id="plantingCancelBtn" class="secondary hidden" onclick="cancelPlantingEdit()">変更をやめる</button><div id="plantingMsg"></div></div>
 <div class="card"><div id="plantingsList"></div></div>
+<div id="plantingProfitBox" class="card hidden"></div>
 </section>
 
 <section id="tasks" class="page hidden">
@@ -202,10 +203,40 @@ ${x.animal_damage?`<div class=muted>🦌 獣害:${esc(x.animal_damage)}</div>`:"
 function renderPlantings(){
  let html=C.plantings.length?C.plantings.map(x=>{
   let f=C.fields.find(z=>z.id===x.field_id),area=Number(x.area_a||0),fa=Number(f?.actual_area_a??f?.area_a??f?.ledger_area_a??0),remain=(f?.field_name==="5号地★"&&fa>0)?Math.max(0,fa-area):null;
-  return `<div class=item><div><b>🌱 ${esc(x.crop_name)}</b> ${esc(x.variety||"")} <span class=badge>${esc(x.status||"")}</span></div><div class=muted>${fName(x.field_id)}　${area||"-"}a　植付:${x.planting_date||"-"}　収穫予定:${x.expected_harvest_date||"-"}</div>${remain!==null?`<div class=muted>空き・土壌改良中：約${remain.toFixed(2).replace(/\.00$/,'')}a</div>`:""}${x.notes?`<div class=muted>📝 ${esc(x.notes)}</div>`:""}<button class="secondary plantingEditButton" onclick="editPlanting(${x.id})">✏️ この作付けを変更</button></div>`
+  return `<div class=item><div><b>🌱 ${esc(x.crop_name)}</b> ${esc(x.variety||"")} <span class=badge>${esc(x.status||"")}</span></div><div class=muted>${fName(x.field_id)}　${area||"-"}a　植付:${x.planting_date||"-"}　収穫予定:${x.expected_harvest_date||"-"}</div>${remain!==null?`<div class=muted>空き・土壌改良中：約${remain.toFixed(2).replace(/\.00$/,"")}a</div>`:""}${x.notes?`<div class=muted>📝 ${esc(x.notes)}</div>`:""}<div class="grid2" style="margin-top:10px"><button class="secondary" onclick="showPlantingProfit(${x.id})">📊 採算を見る</button><button class="secondary" onclick="editPlanting(${x.id})">✏️ この作付けを変更</button></div></div>`
  }).join(""):"<div class=muted>作付けなし</div>";
  $("plantingsList").innerHTML=html;
 }
+
+function showPlantingProfit(id){
+ const x=(C.profitability||[]).find(v=>Number(v.planting_id)===Number(id));
+ const p=C.plantings.find(v=>Number(v.id)===Number(id));
+ if(!p)return;
+ const box=$("plantingProfitBox");
+ if(!x){box.innerHTML=`<div class="sectionTitle"><h3>📊 作付け別採算</h3><button class="secondary" onclick="closePlantingProfit()">閉じる</button></div><div class="err">採算データを取得できませんでした。</div>`;box.classList.remove("hidden");return;}
+ const gp=Number(x.gross_profit_yen||0);
+ const qty=Number(x.harvest_quantity||x.harvest_kg||0);
+ const unit=x.harvest_kg!=null&&Number(x.harvest_kg||0)>0?"kg":"数量";
+ box.innerHTML=`<div class="sectionTitle"><h3>📊 ${esc(x.crop_name)} ${esc(x.variety||"")} の採算</h3><button class="secondary" onclick="closePlantingProfit()">閉じる</button></div>
+ <div class="muted">${esc(x.field_name||fName(p.field_id))}　${Number(x.area_a||0)}a　${esc(x.status||"")}</div>
+ <div class="kpi" style="margin-top:12px">
+ <div class="k"><span>売上</span><b>${yen(x.sales_yen)}</b></div>
+ <div class="k"><span>総コスト</span><b>${yen(x.total_cost_yen)}</b></div>
+ <div class="k"><span>粗利益</span><b class="${gp>=0?"positive":"negative"}">${yen(gp)}</b></div>
+ <div class="k"><span>10aあたり粗利益</span><b class="${Number(x.gross_profit_per_a_yen||0)>=0?"positive":"negative"}">${yen(x.gross_profit_per_a_yen)}</b></div>
+ </div>
+ <div class="item" style="margin-top:12px">
+ <div><b>収穫</b>　${qty.toLocaleString("ja-JP")} ${unit}</div>
+ <div class="small">直接経費 ${yen(x.direct_expense_yen)}</div>
+ <div class="small">作業コスト ${yen(x.task_cost_yen)}</div>
+ <div class="small">作業時間 ${Math.round(Number(x.task_minutes||0)/60*10)/10}時間</div>
+ <div class="small">10aあたり売上 ${yen(x.sales_per_a_yen)}　10aあたり原価 ${yen(x.cost_per_a_yen)}</div>
+ </div>
+ <div class="muted" style="margin-top:10px">※売上・経費・作業実績をこの作付けに紐づけると自動で反映されます。</div>`;
+ box.classList.remove("hidden");box.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function closePlantingProfit(){$("plantingProfitBox").classList.add("hidden");$("plantingProfitBox").innerHTML=""}
+
 function taskCost(id){return C.taskCosts.find(x=>Number(x.task_id)===Number(id))||{workers_total:0,minutes_total:0,labor_cost_yen:0,machine_cost_yen:0,material_cost_yen:0,total_cost_yen:0}}
 function renderTasks(){
  let filter=$("taskFilter")?.value||"open",a=[...C.tasks];
