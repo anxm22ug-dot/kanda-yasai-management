@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="manifest" href="manifest.json">
-<title>神田野菜マネージメント v11</title>
+<title>神田野菜マネージメント v10</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f7f2;color:#243024;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
@@ -29,7 +29,7 @@ label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1
 </style>
 </head>
 <body>
-<header><h1>🌱 神田野菜マネージメント <span class="badge">v11</span></h1><div class="sub">今日やること → 収穫 → 在庫 → 出荷 → 注文 → 収支</div></header>
+<header><h1>🌱 神田野菜マネージメント <span class="badge">v10</span></h1><div class="sub">今日やること → 収穫 → 在庫 → 出荷 → 注文 → 収支</div></header>
 
 <div id="login" class="card" style="max-width:420px;margin:50px auto">
 <h2>ログイン</h2><div class="muted">Supabaseに登録したメールアドレスとパスワードでログインします。</div>
@@ -132,6 +132,7 @@ label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1
 <div class="card"><h3>📊 作付け別採算</h3><div id="profitabilityList">読み込み中…</div></div>
 <div class="card"><h3>⚠️ 未紐付けの売上・経費</h3><div id="unlinkedFinance">読み込み中…</div><div id="unlinkedFinanceDetail"></div><div class="muted">既存の売上・経費も、ここから作付けに紐付けできます。</div></div>
 <div class="card"><h3>売上登録</h3><label>販売日</label><input id="newSaleDate" type="date"><label>商品名</label><input id="newSaleProduct"><div class="grid2"><div><label>数量</label><input id="newSaleQty" type="number" min="0" step=".01"></div><div><label>単価</label><input id="newSalePrice" type="number" min="0"></div></div><div class="grid2"><div><label>圃場（任意）</label><select id="newSaleField"></select></div><div><label>作付け（任意）</label><select id="newSalePlanting"></select></div></div><label>メモ</label><input id="newSaleNotes"><button class="primary" onclick="addSale()">売上登録</button><div id="saleMsg"></div></div>
+<div class="card"><h3>💸 経費管理</h3><div id="expenseSummary">読み込み中…</div><div id="expenseBreakdown" style="margin-top:10px"></div></div>
 <div class="card"><h3>経費登録</h3><label>支払日</label><input id="newExpenseDate" type="date"><label>科目</label><select id="newExpenseCategory"><option>種苗費</option><option>肥料費</option><option>資材費</option><option>農具費</option><option>燃料費</option><option>荷造運賃</option><option>その他</option></select><label>内容</label><input id="newExpenseItem"><label>金額</label><input id="newExpenseAmount" type="number" min="0"><div class="grid2"><div><label>圃場（任意）</label><select id="newExpenseField"></select></div><div><label>作付け（任意）</label><select id="newExpensePlanting"></select></div></div><label>メモ</label><input id="newExpenseNotes"><button class="primary" onclick="addExpense()">経費登録</button><div id="expenseMsg"></div></div>
 <div class="card"><h3>今月の履歴</h3><div id="moneyList"></div></div>
 </section>
@@ -254,7 +255,7 @@ function renderProfitability(){
  const rows=C.profitability||[];
  $("profitabilityList").innerHTML=rows.length?rows.map(x=>{const gp=Number(x.gross_profit_yen||0);return `<div class="item"><div class="row"><b>🌱 ${esc(x.crop_name)} ${esc(x.variety||"")}</b><b class="${gp>=0?"positive":"negative"}">${yen(gp)}</b></div><div class="muted">${esc(x.field_name||"圃場未設定")}　${x.area_a||0}a　収穫 ${Number(x.harvest_kg||0).toLocaleString("ja-JP")}kg</div><div class="small">売上 ${yen(x.sales_yen)}　原価 ${yen(x.total_cost_yen)}（経費 ${yen(x.direct_expense_yen)}＋作業 ${yen(x.task_cost_yen)}）</div><div class="small">10aあたり：売上 ${yen(x.sales_per_a_yen)}　原価 ${yen(x.cost_per_a_yen)}　粗利益 ${yen(x.gross_profit_per_a_yen)}　作業 ${Math.round(Number(x.task_minutes||0)/60*10)/10}時間</div></div>`}).join(""):'<div class="muted">作付け記録がありません。</div>';
  const u=C.unlinked||{};$("unlinkedFinance").innerHTML=`<div class="kpi"><div class="k"><span>未紐付け売上</span><b>${yen(u.unlinked_sales_yen)}</b></div><div class="k"><span>未紐付け経費</span><b>${yen(u.unlinked_expense_yen)}</b></div></div><div class="muted" style="margin-top:8px">売上 ${u.unlinked_sales_count||0}件・経費 ${u.unlinked_expense_count||0}件</div>`;
- renderFinanceOverview(); renderUnlinkedFinanceDetail();
+ renderFinanceOverview(); renderUnlinkedFinanceDetail(); renderExpenseSummary();
 }
 function renderFinanceOverview(){
  const sales=C.sales.reduce((a,x)=>a+Number(x.total_yen||0),0), exp=C.expenses.reduce((a,x)=>a+Number(x.amount_yen||0),0), profit=sales-exp;
@@ -270,6 +271,16 @@ function renderUnlinkedFinanceDetail(){
 function plantingOptions(){return '<option value="">作付けを選択</option>'+C.plantings.map(x=>`<option value="${x.id}">${esc(x.crop_name)} ${esc(x.variety||"")}　${esc(fName(x.field_id))}</option>`).join("")}
 async function linkSale(id){const pid=Number($("linkSale_"+id).value||0);if(!pid)return alert("作付けを選択してください");const p=C.plantings.find(x=>x.id===pid);const r=await sb.from("sales").update({planting_id:pid,field_id:p?.field_id||null}).eq("id",id);if(r.error)return alert("紐付けに失敗しました："+r.error.message);await load();renderProfitability();}
 async function linkExpense(id){const pid=Number($("linkExpense_"+id).value||0);if(!pid)return alert("作付けを選択してください");const p=C.plantings.find(x=>x.id===pid);const r=await sb.from("expenses").update({planting_id:pid,field_id:p?.field_id||null}).eq("id",id);if(r.error)return alert("紐付けに失敗しました："+r.error.message);await load();renderProfitability();}
+function renderExpenseSummary(){
+ const exps=C.expenses||[];
+ const total=exps.reduce((a,x)=>a+Number(x.amount_yen||0),0);
+ const linked=exps.filter(x=>x.planting_id).reduce((a,x)=>a+Number(x.amount_yen||0),0);
+ const unlinked=total-linked;
+ const by={}; exps.forEach(x=>{const k=x.category||"その他";by[k]=(by[k]||0)+Number(x.amount_yen||0)});
+ const entries=Object.entries(by).sort((a,b)=>b[1]-a[1]);
+ $("expenseSummary").innerHTML=`<div class="kpi"><div class="k"><span>累計経費</span><b>${yen(total)}</b></div><div class="k"><span>作付け紐付け済</span><b>${yen(linked)}</b></div><div class="k"><span>未紐付け</span><b>${yen(unlinked)}</b></div></div>`;
+ $("expenseBreakdown").innerHTML=entries.length?'<b>科目別</b>'+entries.map(([k,v])=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee"><span>${esc(k)}</span><b>${yen(v)}</b></div>`).join(''):'<div class="muted">経費記録はありません。</div>';
+}
 function renderMoney(){let ms=monthStart(),a=[];C.sales.filter(x=>x.sale_date>=ms).forEach(x=>a.push({d:x.sale_date,n:"売上",v:Number(x.total_yen||0)}));C.expenses.filter(x=>x.expense_date>=ms).forEach(x=>a.push({d:x.expense_date,n:x.item_name,v:-Number(x.amount_yen||0)}));a.sort((x,y)=>String(y.d).localeCompare(String(x.d)));$("moneyList").innerHTML=a.length?a.slice(0,60).map(x=>`<div class=item><div class=row><b>${esc(x.n)}</b><b class=${x.v>=0?"positive":"negative"}>${yen(x.v)}</b></div><div class=muted>${x.d}</div></div>`).join(""):"<div class=muted>今月の記録なし</div>"}
 function renderOrders(){$("ordersList").innerHTML=C.orders.length?C.orders.map(o=>{let c=C.customers.find(x=>x.id===o.customer_id),is=C.items.filter(i=>i.order_id===o.id).map(i=>{let p=C.products.find(p=>p.id===i.product_id);return `${esc(p?.product_name||"商品")} ${i.quantity}${esc(p?.unit||"")}`}).join(" / ");return `<div class=item><b>🧾 ${esc(c?.customer_name||"お客様")}</b> <span class=badge>${esc(o.status||"受付")}</span><div>${is}</div><b>${yen(o.total_yen)}</b><div class=muted>${o.receive_method||"発送"} ${o.requested_date?"・希望 "+o.requested_date:""}${c?.customer_type?"・経路 "+c.customer_type:""}</div><button class=secondary onclick="directShip(${o.id})">📦 出荷</button></div>`}).join(""):"<div class=muted>注文なし</div>"}
 function fillFields(el){el.innerHTML='<option value="">圃場を選択</option>'+[...C.fields].sort(sortFields).map(x=>`<option value="${x.id}">${esc(x.field_name)}　${x.actual_area_a??x.area_a??x.ledger_area_a??0}a</option>`).join("")}
