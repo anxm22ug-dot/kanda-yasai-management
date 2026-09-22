@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<title>神田野菜マネージメント v18</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f7f2;color:#243024;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
+header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #ddd;padding:12px 14px}
+h1{font-size:19px;margin:0 0 3px}h2,h3{margin:0 0 10px}.sub,.muted{font-size:12px;color:#777}
+main{max-width:780px;margin:auto;padding:12px 12px 105px}.card{background:#fff;border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 2px 10px #0001}
+.kpi{display:grid;grid-template-columns:1fr 1fr;gap:9px}.k{background:#f0f5ed;border-radius:13px;padding:12px}.k span{font-size:12px;color:#666}.k b{display:block;font-size:21px;margin-top:4px}
+.money{font-size:21px;font-weight:800}.positive{color:#19733a}.negative{color:#b00020}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid #ddd;display:grid;grid-template-columns:repeat(8,1fr);padding-bottom:env(safe-area-inset-bottom)}
+nav button{border:0;background:#fff;color:#555;padding:7px 1px;font-size:10px;line-height:1.25}nav button.active{color:#19733a;font-weight:800}
+button{cursor:pointer}.primary,.secondary,.danger{border:0;border-radius:10px;padding:10px 12px;font-weight:700}.primary{background:#19733a;color:#fff}.secondary{background:#eef3ed}.danger{background:#fff0f0;color:#b00020}
+input,select,textarea{width:100%;padding:11px;border:1px solid #ccc;border-radius:10px;font-size:16px;background:#fff;margin-top:5px;margin-bottom:9px}textarea{min-height:75px}
+label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.row{display:flex;justify-content:space-between;align-items:center;gap:8px}.hidden{display:none}.item{border-top:1px solid #eee;padding:11px 0}.item:first-child{border-top:0}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef3ed;font-size:11px}.blue{color:#1266d6}.yellow{color:#9a7200}.err{color:#b00020;font-size:13px}.success{color:#19733a;font-size:13px}
+.sectionTitle{display:flex;justify-content:space-between;align-items:center;gap:8px}.addbox{background:#f7faf5;border:1px solid #dce7d8}
+.field-parent{font-weight:800;background:#f7faf5;border-radius:10px;padding:8px}.field-child{padding-left:22px}.menuGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.menuGrid button{text-align:left;background:#fff;border:1px solid #ddd;border-radius:13px;padding:14px;font-weight:700}
+.small{font-size:12px}.plantingEditButton{display:block;width:100%;margin-top:10px;border:1px solid #cfd8cb;font-size:15px;padding:12px}.dangerText{color:#b00020;font-weight:700}
+@media(max-width:430px){nav button{font-size:9px}.grid2{grid-template-columns:1fr}.menuGrid{grid-template-columns:1fr}}
+.green{color:#17823b}.badge{display:inline-block;padding:2px 7px;border-radius:999px;background:#eef3ee}<style>
+.workScope{display:inline-block;margin:8px 0 2px;padding:7px 10px;border-radius:999px;background:#eef6ef;font-weight:700;color:#2d5b36}.workScope.individual{background:#f3f3f3;color:#555}.workAlloc{padding:8px 10px;background:#f7faf7;border-radius:10px;line-height:1.65}
+</style>
+</style>
+</head>
+<body>
+<header><h1>🌱 神田野菜マネージメント <span class="badge">v18</span></h1><div class="sub">今日やること → 収穫 → 在庫 → 出荷 → 注文 → 収支</div></header>
+
+<div id="login" class="card" style="max-width:420px;margin:50px auto">
+<h2>ログイン</h2><div class="muted">Supabaseに登録したメールアドレスとパスワードでログインします。</div>
+<input id="email" type="email" placeholder="メールアドレス"><input id="password" type="password" placeholder="パスワード">
+<button class="primary" style="width:100%" onclick="login()">ログイン</button><div id="loginErr" class="err"></div>
+</div>
+
+<main id="app" class="hidden">
+<section id="home" class="page">
+<div class="card"><b>今日の神田野菜</b><div class="muted" id="today"></div></div>
+<div class="kpi">
+<div class="k"><span>圃場</span><b id="fieldCount">-</b></div><div class="k"><span>総面積</span><b id="area">-</b></div>
+<div class="k"><span>栽培中</span><b id="plantingCount">-</b></div><div class="k"><span>今日の作業</span><b id="taskCount">-</b></div>
+</div>
+<div class="kpi"><div class="k"><span>今月売上</span><b id="monthSales">¥0</b></div><div class="k"><span>今月経費</span><b id="monthExpenses">¥0</b></div></div>
+<div class="card"><h3>📊 今月収支</h3><div id="monthProfit" class="money">¥0</div></div>
+<div class="card"><h3>🔵 今日やる</h3><div id="todayTasks">読み込み中…</div></div>
+<div class="card"><h3>🟡 次にやる</h3><div id="nextTasks">読み込み中…</div></div>
+<div class="card"><h3>🌱 栽培中</h3><div id="activePlantings"></div></div>
+<div class="card"><h3>🥕 在庫</h3><div id="homeInventory">読み込み中…</div></div>
+</section>
+
+<section id="fields" class="page hidden">
+<div class="card"><div class="sectionTitle"><h2>📋 圃場一覧</h2><button class="primary" onclick="toggle('fieldBox')">＋追加</button></div></div>
+<div id="fieldBox" class="card addbox hidden"><h3>新しい圃場</h3>
+<label>圃場名</label><input id="newFieldName" placeholder="12号地"><div class="grid2">
+<div><label>面積（a）</label><input id="newFieldArea" type="number" step=".01"></div><div><label>ランク</label><select id="newFieldRank"><option>A</option><option>B</option><option>C</option></select></div></div>
+<label>土質</label><input id="newFieldSoil"><label>排水</label><input id="newFieldDrainage"><label>獣害</label><input id="newFieldAnimal"><label>メモ</label><textarea id="newFieldNotes"></textarea>
+<button class="primary" onclick="addField()">登録</button><div id="fieldMsg"></div></div>
+<div class="card"><div id="fieldsList"></div></div>
+</section>
+
+<section id="plantings" class="page hidden">
+<div class="card"><div class="sectionTitle"><h2>🌱 作付け</h2><button class="primary" onclick="toggle('plantingBox');fillPlantingFields()">＋追加</button></div></div>
+<div id="plantingBox" class="card addbox hidden"><h3 id="plantingFormTitle">新しい作付け</h3>
+<label>作物</label><input id="newPlantCrop"><label>品種</label><input id="newPlantVariety"><label>圃場</label><select id="newPlantField"></select>
+<div class="grid2"><div><label>面積（a）</label><input id="newPlantArea" type="number" step=".01"></div><div><label>状態</label><select id="newPlantStatus"><option>栽培中</option><option>予定</option><option>終了</option></select></div></div>
+<div class="grid2"><div><label>植付・播種日</label><input id="newPlantDate" type="date"></div><div><label>収穫予定日</label><input id="newPlantHarvest" type="date"></div></div>
+<label>メモ</label><textarea id="newPlantNotes"></textarea><input id="editPlantingId" type="hidden"><button id="plantingSaveBtn" class="primary" onclick="savePlanting()">登録</button><button id="plantingCancelBtn" class="secondary hidden" onclick="cancelPlantingEdit()">変更をやめる</button><div id="plantingMsg"></div></div>
+<div class="card"><div id="plantingsList"></div></div>
+<div id="plantingProfitBox" class="card hidden"></div>
+</section>
+
+<section id="tasks" class="page hidden">
+<div class="card"><div class="sectionTitle"><h2>🚜 作業</h2><button class="primary" onclick="openNewTask()">＋追加</button></div>
+<div class="kpi" style="margin-top:10px"><div class="k"><span>今日やる</span><b id="taskTodayKpi">-</b></div><div class="k"><span>未完了</span><b id="taskOpenKpi">-</b></div></div></div>
+<div id="taskBox" class="card addbox hidden"><h3 id="taskFormTitle">新しい作業</h3><label>作業日</label><input id="newTaskDate" type="date"><label>作業内容</label><input id="newTaskName" placeholder="例：ニンジン除草、オクラ収穫、畝立て">
+<label>圃場</label><select id="newTaskField"></select><label>作業対象</label><select id="newTaskScope" onchange="toggleTaskScope()"><option value="planting">個別の作付け</option><option value="crop">作物全体（同じ作物にシンクロ）</option></select><div id="taskPlantingWrap"><label>作付け（任意）</label><select id="newTaskPlanting"></select></div><div id="taskCropWrap" class="hidden"><label>作物</label><select id="newTaskCrop"></select><div class="muted">同じ作物の複数作付けに作業実績を自動配分します。面積比でコスト・時間も按分します。</div></div><label>優先順位</label><select id="newTaskPriority"><option>急務</option><option selected>通常</option><option>後日</option></select>
+<label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="newTaskDaily" type="checkbox" style="width:auto;margin:0"> 毎日表示する作業（苗の水やり・罠の見廻りなど）</label>
+<div class="muted">毎日表示をONにすると、今日完了しても翌日また表示されます。「総完」で連続表示を終了できます。</div>
+<label>メモ</label><textarea id="newTaskNotes" placeholder="資材・注意点など"></textarea><input id="editTaskId" type="hidden"><div class="grid2"><button class="primary" onclick="saveTask()">保存</button><button id="taskCancelBtn" class="secondary hidden" onclick="cancelTaskEdit()">変更をやめる</button></div><div id="taskMsg"></div></div>
+<div id="workLogBox" class="card addbox hidden"><h3>作業実績を記録</h3><div class="muted" id="workLogTaskName"></div><div id="workLogScope" class="workScope hidden"></div><div id="workLogAllocation" class="muted hidden" style="margin:8px 0 12px"></div><input id="workLogTaskId" type="hidden"><label>作業日</label><input id="workLogDate" type="date"><div class="grid2"><div><label>人数</label><input id="workLogWorkers" type="number" min="1" step="1" value="1"></div><div><label>作業時間（分）</label><input id="workLogMinutes" type="number" min="0" step="10" value="60"></div></div><div class="grid2"><div><label>人件費（円）</label><input id="workLogLabor" type="number" min="0" step="100" value="0"></div><div><label>機械・燃料費（円）</label><input id="workLogMachine" type="number" min="0" step="100" value="0"></div></div><label>使用資材（任意）</label><input id="workLogMaterial" placeholder="例：有機石灰、堆肥、マルチ"><div class="grid2"><div><label>使用量</label><input id="workLogMaterialQty" type="number" min="0" step="0.01" value="0"></div><div><label>単位</label><input id="workLogMaterialUnit" value="kg"></div></div><label>資材単価（円）</label><input id="workLogMaterialUnitCost" type="number" min="0" step="1" value="0"><label>メモ</label><textarea id="workLogNotes"></textarea><div class="grid2"><button class="primary" onclick="saveWorkLog()">実績を保存</button><button class="secondary" onclick="cancelWorkLog()">閉じる</button></div><div id="workLogMsg"></div></div>
+<div class="card"><div class="sectionTitle"><h3>作業一覧</h3><select id="taskFilter" onchange="renderTasks()" style="width:auto;min-width:125px;margin:0"><option value="open">未完了</option><option value="today">今日</option><option value="all">すべて</option><option value="done">完了</option></select></div><div id="tasksList"></div></div>
+</section>
+
+<section id="harvest" class="page hidden">
+<div class="card"><div class="sectionTitle"><h2>🥕 収穫・在庫</h2><button class="primary" onclick="toggle('harvestBox');fillHarvest()">＋収穫</button></div></div>
+<div id="harvestBox" class="card addbox hidden"><h3>収穫登録</h3><label>収穫日</label><input id="newHarvestDate" type="date"><label>作付け</label><select id="newHarvestPlanting"></select>
+<div class="grid2"><div><label>数量</label><input id="newHarvestQty" type="number" min="0" step=".01"></div><div><label>単位</label><select id="newHarvestUnit"><option>kg</option><option>個</option><option>本</option><option>袋</option><option>箱</option></select></div></div>
+<label>等級</label><select id="newHarvestGrade"><option value="">指定なし</option><option>A</option><option>B</option><option>C</option></select><label>メモ</label><textarea id="newHarvestNotes"></textarea>
+<button class="primary" onclick="addHarvest()">登録</button><div id="harvestMsg"></div></div>
+<div class="card"><h3>現在庫</h3><div class="muted">収穫登録 → 在庫へ自動反映。直販・委託販売の確定売上もここから管理します。</div><div id="inventoryList"></div></div><div class="card"><h3>収穫履歴</h3><div id="harvestList"></div></div>
+</section>
+
+<section id="shipping" class="page hidden">
+<div class="card"><h2>📦 出荷</h2><div class="menuGrid">
+<button onclick="shippingMode('direct')">🚚 直販出荷<br><span class="muted">注文を発送・在庫反映</span></button>
+<button onclick="shippingMode('market')">🏪 スーパー・市場へ出荷<br><span class="muted">出荷数を先に記録</span></button>
+<button onclick="shippingMode('settle')">🧾 委託精算<br><span class="muted">翌日返品→実売数で確定</span></button>
+<button onclick="shippingMode('store')">⚙️ 店舗・手数料設定<br><span class="muted">店舗ごとの手数料を記憶</span></button>
+</div></div>
+
+<div id="shipDirect" class="card"><h3>🚚 直販出荷</h3><div id="directList">読み込み中…</div></div>
+
+<div id="shipMarket" class="card hidden"><h3>🏪 スーパー・市場へ出荷</h3>
+<div class="muted">出荷時点では売上確定しません。翌日に返品数を入力して実売数を確定します。</div>
+<label>出荷日</label><input id="marketDate" type="date"><label>店舗・出荷先</label><input id="marketDestination" list="destinationList" placeholder="例：○○スーパー"><datalist id="destinationList"></datalist>
+<label>商品</label><select id="marketProduct"></select><div class="grid2"><div><label>出荷数量（販売単位）</label><input id="marketQty" type="number" min="0" step=".01"></div><div><label>販売単価（円）</label><input id="marketPrice" type="number" min="0" step="1"></div></div>
+<label>メモ</label><textarea id="marketNotes"></textarea><button class="primary" onclick="addMarketShipment()">出荷を記録</button><div id="marketMsg"></div>
+<hr><h3>未精算</h3><div id="marketPending"></div></div>
+
+<div id="shipSettle" class="card hidden"><h3>🧾 委託精算</h3><div class="muted">返品は「返品入庫」なら在庫へ戻し、「廃棄・ロス」なら在庫へ戻しません。</div><div id="settleList"></div></div>
+
+<div id="shipStore" class="card hidden"><h3>⚙️ 店舗・手数料設定</h3>
+<label>店舗名</label><input id="storeName" placeholder="例：○○スーパー"><div class="grid2"><div><label>手数料方式</label><select id="storeCommissionType"><option value="percent">％</option><option value="fixed">固定額</option></select></div><div><label>手数料</label><input id="storeCommission" type="number" min="0" step=".01"></div></div>
+<label>メモ</label><textarea id="storeNotes"></textarea><button class="primary" onclick="saveStore()">店舗を保存</button><div id="storeMsg"></div><hr><div id="storeList"></div></div>
+</section>
+
+<section id="orders" class="page hidden">
+<div class="card"><div class="sectionTitle"><h2>🧾 注文</h2><button class="primary" onclick="toggle('orderBox');fillOrderProducts();$('newOrderDate').value=todayJP()">＋注文</button></div></div>
+<div id="orderBox" class="card addbox hidden"><h3>注文登録</h3><label>注文日</label><input id="newOrderDate" type="date"><label>お客様名</label><input id="newOrderCustomer"><div class="grid2">
+<div><label>連絡先</label><input id="newOrderPhone"></div><div><label>経路</label><select id="newOrderType"><option>LINE</option><option>Instagram</option><option>電話</option><option>対面</option><option>その他</option></select></div></div>
+<label>商品</label><select id="newOrderProduct"></select><div class="grid2"><div><label>数量</label><input id="newOrderQty" type="number" min="0" step=".01"></div><div><label>単価</label><input id="newOrderPrice" type="number" min="0"></div></div>
+<div class="grid2"><div><label>受取方法</label><select id="newOrderReceive"><option>発送</option><option>店頭受取</option><option>配達</option></select></div><div><label>希望日</label><input id="newOrderRequested" type="date"></div></div>
+<label>発送先</label><input id="newOrderAddress"><label>メモ</label><textarea id="newOrderNotes"></textarea><button class="primary" onclick="addOrder()">登録</button><div id="orderMsg"></div></div>
+<div class="card"><div id="ordersList"></div></div>
+</section>
+
+<section id="money" class="page hidden">
+<div class="card"><h2>💰 収支・採算</h2><div class="muted">売上・経費・作業実績を作付けに紐づけると、圃場・作物別の原価と粗利益が自動計算されます。</div></div>
+<div class="card"><h3>📈 経営全体</h3><div id="financeOverview">読み込み中…</div></div>
+<div class="card"><h3>📊 作付け別採算</h3><div id="profitabilityList">読み込み中…</div></div>
+<div class="card"><h3>📊 経営分析</h3>
+<div class="muted">作物別・圃場別に、売上・原価・粗利益・10aあたり・作業1時間あたりを確認できます。</div>
+<div class="grid2" style="margin-top:10px">
+<div><label>表示</label><select id="analysisMode" onchange="renderManagementAnalysis()"><option value="crop">作物別</option><option value="field">圃場別</option></select></div>
+<div><label>対象</label><select id="analysisCrop" onchange="renderManagementAnalysis()"><option value="">すべて</option></select></div>
+</div>
+<div id="managementAnalysis" style="margin-top:12px">読み込み中…</div>
+</div>
+<div class="card"><h3>⚠️ 未紐付けの売上・経費</h3><div id="unlinkedFinance">読み込み中…</div><div id="unlinkedFinanceDetail"></div><div class="muted">既存の売上・経費も、ここから作付けに紐付けできます。</div></div>
+<div class="card"><h3>売上登録</h3><label>販売日</label><input id="newSaleDate" type="date"><label>商品名</label><input id="newSaleProduct"><div class="grid2"><div><label>数量</label><input id="newSaleQty" type="number" min="0" step=".01"></div><div><label>単価</label><input id="newSalePrice" type="number" min="0"></div></div><div class="grid2"><div><label>圃場（任意）</label><select id="newSaleField"></select></div><div><label>作付け（任意）</label><select id="newSalePlanting"></select></div></div><label>メモ</label><input id="newSaleNotes"><button class="primary" onclick="addSale()">売上登録</button><div id="saleMsg"></div></div>
+<div class="card"><h3>💸 経費管理</h3><div id="expenseSummary">読み込み中…</div><div id="expenseBreakdown" style="margin-top:10px"></div></div>
+<div class="card"><h3>経費登録</h3><label>支払日</label><input id="newExpenseDate" type="date"><label>科目</label><select id="newExpenseCategory"><option>種苗費</option><option>肥料費</option><option>資材費</option><option>農具費</option><option>燃料費</option><option>荷造運賃</option><option>その他</option></select><label>内容</label><input id="newExpenseItem"><label>金額</label><input id="newExpenseAmount" type="number" min="0"><div class="grid2"><div><label>圃場（任意）</label><select id="newExpenseField"></select></div><div><label>作付け（任意）</label><select id="newExpensePlanting"></select></div></div><label>メモ</label><input id="newExpenseNotes"><button class="primary" onclick="addExpense()">経費登録</button><div id="expenseMsg"></div></div>
+<div class="card"><h3>今月の履歴</h3><div id="moneyList"></div></div>
+</section>
+</main>
+
+<nav id="nav" class="hidden">
+<button class="active" onclick="show('home',this)">🏠<br>ホーム</button><button onclick="show('fields',this)">📋<br>圃場</button><button onclick="show('plantings',this)">🌱<br>作付け</button><button onclick="show('tasks',this)">🚜<br>作業</button><button onclick="show('harvest',this)">🥕<br>収穫</button><button onclick="show('shipping',this)">📦<br>出荷</button><button onclick="show('orders',this)">🧾<br>注文</button><button onclick="show('money',this)">💰<br>収支</button>
+</nav>
+
+<script>
+const SUPABASE_URL="https://sujucntchbjltlhrqwzo.supabase.co";
+const SUPABASE_KEY="sb_publishable_t9Wvdir7C78pLiwj4Dvsyw_R4yGtPI9";
+let sb=null;
+function ensureSupabase(){
+ if(sb) return sb;
+ if(typeof supabase==="undefined") throw new Error("Supabaseの読み込みに失敗しました。");
+ sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY); return sb;
+}
+const $=id=>document.getElementById(id);
+let C={fields:[],plantings:[],tasks:[],taskLogs:[],harvests:[],moves:[],sales:[],expenses:[],orders:[],customers:[],items:[],products:[],destinations:[],shipments:[],shipmentItems:[],settlements:[],taskCosts:[],profitability:[],unlinked:null};
+function todayJP(){return new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})}
+function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function yen(v){return "¥"+Math.round(Number(v||0)).toLocaleString("ja-JP")}
+function msg(id,s){$(id).innerHTML=s}
+function toggle(id){$(id).classList.toggle("hidden")}
+function monthStart(){let d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).toLocaleDateString("sv-SE")}
+function fName(id){let x=C.fields.find(v=>v.id===id);return x?.field_name||"圃場未設定"}
+function pName(id){let x=C.plantings.find(v=>v.id===id);return x?`${x.crop_name} ${x.variety||""}`:"作付け未設定"}
+function sortFields(a,b){
+ const n=s=>{let m=String(s||"").match(/^(?:.*?)(\d+)(?:-(\d+))?/);return m?[Number(m[1]),Number(m[2]||0)]:[999,999]};
+ const [an,as]=n(a.field_name),[bn,bs]=n(b.field_name);return an-bn||as-bs||String(a.field_name).localeCompare(String(b.field_name),"ja")
+}
+function inventoryTotals(){
+ const m={},seen=new Set();for(const x of C.moves){const k=x.id!=null?"id:"+x.id:[x.movement_type,x.source_id,x.movement_date,x.crop_name,x.variety,x.quantity,x.unit].join("|");if(seen.has(k))continue;seen.add(k);const key=[x.crop_name,x.variety||"",x.unit||"kg"].join("|");m[key]??={crop:x.crop_name,variety:x.variety||"",unit:x.unit||"kg",qty:0};m[key].qty+=["販売","出荷"].includes(x.movement_type)?-Number(x.quantity||0):Number(x.quantity||0)}return Object.values(m).filter(x=>Math.abs(x.qty)>1e-8)}
+function findInv(pr){if(!pr)return null;let n=pr.product_name||pr.crop_name||"";let a=inventoryTotals().filter(x=>n===x.crop||n.includes(x.crop)||(x.variety&&(n===x.variety||n.includes(x.variety))));let e=a.filter(x=>x.variety&&(n===x.variety||n.includes(x.variety)));if(e.length)e=e;return (e.length===1?e:a.length===1?a[0]:null)}
+function invKey(pr){let i=findInv(pr);return [i?.crop||pr?.crop_name||pr?.product_name||"",i?.variety||"",i?.unit||pr?.unit||"kg"].join("|")}
+function reserved(){
+ const m={};for(const o of C.orders.filter(o=>!["発送済","キャンセル","取消"].includes(o.status)))for(const i of C.items.filter(i=>i.order_id===o.id)){let pr=C.products.find(p=>p.id===i.product_id);if(!pr)continue;let k=invKey(pr);m[k]=(m[k]||0)+Number(i.quantity||0)}return m
+}
+function renderInventory(){
+ let inv=inventoryTotals(),r=reserved(),rows=inv.map(x=>{let k=[x.crop,x.variety,x.unit].join("|"),q=r[k]||0;return {...x,res:q,avail:x.qty-q}});let html=rows.length?rows.map(x=>`<div class="item"><b>🥕 ${esc(x.crop)}</b> ${esc(x.variety)}<div class="muted">実在庫 ${x.qty.toLocaleString("ja-JP")} ${esc(x.unit)}　予約 ${x.res.toLocaleString("ja-JP")} ${esc(x.unit)}　販売可能 <b>${Math.max(0,x.avail).toLocaleString("ja-JP")} ${esc(x.unit)}</b></div>${x.avail<0?`<div class="dangerText">🟡 予約待ち ${Math.abs(x.avail).toLocaleString("ja-JP")} ${esc(x.unit)}不足</div>`:""}</div>`).join(""):"<div class='muted'>在庫はまだありません。</div>";$("inventoryList").innerHTML=html;$("homeInventory").innerHTML=html}
+async function load(){
+ const r=await Promise.all([
+ sb.from("fields").select("*"),sb.from("crop_plantings").select("*").order("id",{ascending:false}),sb.from("farm_tasks").select("*").order("task_date").limit(300),
+ sb.from("harvests").select("*").order("harvest_date",{ascending:false}).limit(300),sb.from("inventory_movements").select("*").order("movement_date").limit(1000),
+ sb.from("sales").select("*").order("sale_date",{ascending:false}).limit(300),sb.from("expenses").select("*").order("expense_date",{ascending:false}).limit(300),
+ sb.from("orders").select("*").order("order_date",{ascending:false}).limit(300),sb.from("customers").select("*").limit(300),sb.from("order_items").select("*").limit(1000),
+ sb.from("products").select("*").order("id"),sb.from("sales_destinations").select("*").eq("active",true).order("destination_name"),
+ sb.from("sales_shipments").select("*").order("shipment_date",{ascending:false}).limit(300),sb.from("sales_shipment_items").select("*").limit(1000),
+ sb.from("sales_settlements").select("*").limit(1000),sb.from("task_cost_summary").select("*"),sb.from("planting_profitability_summary").select("*"),sb.from("unlinked_financial_summary").select("*").maybeSingle(),sb.from("task_completion_logs").select("*").eq("completion_date",todayJP())
+ ]);
+ [C.fields,C.plantings,C.tasks,C.harvests,C.moves,C.sales,C.expenses,C.orders,C.customers,C.items,C.products,C.destinations,C.shipments,C.shipmentItems,C.settlements,C.taskCosts,C.profitability,C.unlinked,C.taskLogs]=r.map((x,i)=>i===17?(x.data||[]):(x.data||[]));
+ renderAll()
+}
+function renderAll(){
+ $("today").textContent=new Date().toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
+ $("fieldCount").textContent=C.fields.length;$("area").textContent=C.fields.filter(x=>x.field_kind!=="台帳圃場").reduce((s,x)=>s+Number(x.actual_area_a??x.area_a??0),0).toFixed(2)+"a";
+ $("plantingCount").textContent=C.plantings.filter(x=>x.status==="栽培中").length;let td=C.tasks.filter(x=>isTaskVisibleToday(x));$("taskCount").textContent=td.filter(x=>!isTaskDoneToday(x)).length;
+ $("todayTasks").innerHTML=taskHTML(td,"blue");$("nextTasks").innerHTML=taskHTML(C.tasks.filter(x=>isTaskOpenForFuture(x)).slice(0,8),"yellow");
+ let a=C.plantings.filter(x=>x.status==="栽培中");$("activePlantings").innerHTML=a.length?a.map(x=>`<div class=item><b>🌱 ${esc(x.crop_name)}</b> ${esc(x.variety||"")}<div class=muted>${fName(x.field_id)}　${x.area_a||"-"}a</div></div>`).join(""):"<div class=muted>栽培中なし</div>";
+ renderFields();renderPlantings();renderTasks();renderInventory();renderHarvests();renderOrders();renderMoney();renderProfitability();renderShipping();fillTaskFields();fillPlantingFields();fillProfitFields();fillOrderProducts();fillMarketProducts();fillDestinations();
+ let ms=monthStart(),s=C.sales.filter(x=>x.sale_date>=ms).reduce((a,x)=>a+Number(x.total_yen||0),0),e=C.expenses.filter(x=>x.expense_date>=ms).reduce((a,x)=>a+Number(x.amount_yen||0),0);$("monthSales").textContent=yen(s);$("monthExpenses").textContent=yen(e);$("monthProfit").textContent=yen(s-e);$("monthProfit").className="money "+(s-e>=0?"positive":"negative")
+}
+function isRecurring(x){return x.recurrence_type==="daily"&&x.recurrence_active!==false}
+function isTaskDoneToday(x){return isRecurring(x)?C.taskLogs.some(l=>Number(l.task_id)===Number(x.id)):x.status==="完了"}
+function isTaskVisibleToday(x){if(isRecurring(x))return true;return x.task_date===todayJP()&&x.status!=="完了"}
+function isTaskOpenForFuture(x){if(isRecurring(x))return true;return x.status!=="完了"&&x.task_date!==todayJP()}
+function priorityRank(p){return p==="急務"?0:p==="通常"?1:2}
+function taskHTML(a,c){return a.length?[...a].sort((x,y)=>priorityRank(x.priority)-priorityRank(y.priority)||(x.task_date||"").localeCompare(y.task_date||"")||x.id-y.id).map(x=>{let d=isTaskDoneToday(x);return `<div class=item><span class=${d?"green":c}>●</span> <b>${d?"✅ ":""}${esc(x.task_name)}</b><div class=muted>${isRecurring(x)?"毎日表示":""}　${fName(x.field_id)}　<span class=badge>${esc(x.priority||"")}</span>${d?"　<span class=badge>本日完了</span>":""}</div></div>`}).join(""):"<div class=muted>今のところありません。</div>"}
+function fieldRows(){
+ const fs=[...C.fields].sort(sortFields),parents=fs.filter(x=>!x.parent_field_id),out=[];
+ for(const p of parents){out.push({x:p,child:false});fs.filter(x=>x.parent_field_id===p.id).sort(sortFields).forEach(x=>out.push({x,child:true}))}
+ fs.filter(x=>x.parent_field_id&&!C.fields.some(p=>p.id===x.parent_field_id)).forEach(x=>out.push({x,child:true}));return out
+}
+function renderFields(){
+ $("fieldsList").innerHTML=fieldRows().map(({x,child})=>`<div class="item ${child?"field-child":""} ${x.field_kind==="台帳圃場"?"field-parent":""}">
+<div class="row"><b>${child?"└ ":""}${esc(x.field_name||"圃場")} ${x.field_name==="5号地★"?"⭐":""}</b><span class=badge>${esc(x.actual_area_a??x.area_a??x.ledger_area_a??0)}a</span></div>
+<div class=muted>${x.field_kind==="台帳圃場"?"台帳圃場":x.field_name==="5号地★"?"自己保有":""} ${x.rank?"ランク:"+esc(x.rank):""} ${x.soil_type?"土質:"+esc(x.soil_type):""} ${x.drainage?"排水:"+esc(x.drainage):""}</div>
+${x.animal_damage?`<div class=muted>🦌 獣害:${esc(x.animal_damage)}</div>`:""}${x.notes?`<div class=muted>📝 ${esc(x.notes)}</div>`:""}</div>`).join("")}
+function renderPlantings(){
+ let html=C.plantings.length?C.plantings.map(x=>{
+  let f=C.fields.find(z=>z.id===x.field_id),area=Number(x.area_a||0),fa=Number(f?.actual_area_a??f?.area_a??f?.ledger_area_a??0),remain=(f?.field_name==="5号地★"&&fa>0)?Math.max(0,fa-area):null;
+  return `<div class=item><div><b>🌱 ${esc(x.crop_name)}</b> ${esc(x.variety||"")} <span class=badge>${esc(x.status||"")}</span></div><div class=muted>${fName(x.field_id)}　${area||"-"}a　植付:${x.planting_date||"-"}　収穫予定:${x.expected_harvest_date||"-"}</div>${remain!==null?`<div class=muted>空き・土壌改良中：約${remain.toFixed(2).replace(/\.00$/,"")}a</div>`:""}${x.notes?`<div class=muted>📝 ${esc(x.notes)}</div>`:""}<div class="grid2" style="margin-top:10px"><button class="secondary" onclick="showPlantingProfit(${x.id})">📊 採算を見る</button><button class="secondary" onclick="editPlanting(${x.id})">✏️ この作付けを変更</button></div></div>`
+ }).join(""):"<div class=muted>作付けなし</div>";
+ $("plantingsList").innerHTML=html;
+}
+
+function showPlantingProfit(id){
+ const x=(C.profitability||[]).find(v=>Number(v.planting_id)===Number(id));
+ const p=C.plantings.find(v=>Number(v.id)===Number(id));
+ if(!p)return;
+ const box=$("plantingProfitBox");
+ if(!x){box.innerHTML=`<div class="sectionTitle"><h3>📊 作付け別採算</h3><button class="secondary" onclick="closePlantingProfit()">閉じる</button></div><div class="err">採算データを取得できませんでした。</div>`;box.classList.remove("hidden");return;}
+ const gp=Number(x.gross_profit_yen||0);
+ const qty=Number(x.harvest_quantity||x.harvest_kg||0);
+ const unit=x.harvest_kg!=null&&Number(x.harvest_kg||0)>0?"kg":"数量";
+ box.innerHTML=`<div class="sectionTitle"><h3>📊 ${esc(x.crop_name)} ${esc(x.variety||"")} の採算</h3><button class="secondary" onclick="closePlantingProfit()">閉じる</button></div>
+ <div class="muted">${esc(x.field_name||fName(p.field_id))}　${Number(x.area_a||0)}a　${esc(x.status||"")}</div>
+ <div class="kpi" style="margin-top:12px">
+ <div class="k"><span>売上</span><b>${yen(x.sales_yen)}</b></div>
+ <div class="k"><span>総コスト</span><b>${yen(x.total_cost_yen)}</b></div>
+ <div class="k"><span>粗利益</span><b class="${gp>=0?"positive":"negative"}">${yen(gp)}</b></div>
+ <div class="k"><span>10aあたり粗利益</span><b class="${Number(x.gross_profit_per_a_yen||0)>=0?"positive":"negative"}">${yen(x.gross_profit_per_a_yen)}</b></div>
+ </div>
+ <div class="item" style="margin-top:12px">
+ <div><b>収穫</b>　${qty.toLocaleString("ja-JP")} ${unit}</div>
+ <div class="small">直接経費 ${yen(x.direct_expense_yen)}</div>
+ <div class="small">作業コスト ${yen(x.task_cost_yen)}</div>
+ <div class="small">作業時間 ${Math.round(Number(x.task_minutes||0)/60*10)/10}時間</div>
+ <div class="small">10aあたり売上 ${yen(x.sales_per_a_yen)}　10aあたり原価 ${yen(x.cost_per_a_yen)}</div>
+ </div>
+ <div class="muted" style="margin-top:10px">※売上・経費・作業実績をこの作付けに紐づけると自動で反映されます。</div>`;
+ box.classList.remove("hidden");box.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function closePlantingProfit(){$("plantingProfitBox").classList.add("hidden");$("plantingProfitBox").innerHTML=""}
+
+function taskCost(id){return C.taskCosts.find(x=>Number(x.task_id)===Number(id))||{workers_total:0,minutes_total:0,labor_cost_yen:0,machine_cost_yen:0,material_cost_yen:0,total_cost_yen:0}}
+function renderTasks(){
+ let filter=$("taskFilter")?.value||"open",a=[...C.tasks];
+ if(filter==="open")a=a.filter(x=>isRecurring(x)||x.status!=="完了");
+ if(filter==="today")a=a.filter(x=>isTaskVisibleToday(x));
+ if(filter==="done")a=a.filter(x=>isRecurring(x)?isTaskDoneToday(x):x.status==="完了");
+ a.sort((x,y)=>priorityRank(x.priority)-priorityRank(y.priority)||(x.task_date||"").localeCompare(y.task_date||"")||(x.id-y.id));
+ $("tasksList").innerHTML=a.length?a.map(x=>{let doneToday=isTaskDoneToday(x),c=taskCost(x.id),rec=isRecurring(x);return `<div class=item><div class=row><div style="min-width:0"><b>${doneToday?"✅ ":"🚜 "}${esc(x.task_name)}</b><div class=muted>${rec?"毎日表示":(x.task_date||"-")}　${x.crop_name&&!x.planting_id?"🥕 "+esc(x.crop_name)+"共通":fName(x.field_id)}　<span class=badge>${esc(x.priority||"通常")}</span>${rec&&doneToday?"　<span class=badge>本日完了</span>":""}</div>${x.notes?`<div class=muted>📝 ${esc(x.notes)}</div>`:""}<div class=muted>⏱ ${c.minutes_total?Math.floor(c.minutes_total/60)+"時間 "+(c.minutes_total%60)+"分":"未記録"}　💴 実績コスト ${yen(c.total_cost_yen)}</div></div><div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">${rec?`<button class=primary onclick="done(${x.id})">${doneToday?"本日完了済":"今日完了"}</button><button class=secondary onclick="finishRecurring(${x.id})">総完</button>`:doneToday?"":`<button class=primary onclick="done(${x.id})">完了</button>`}<button class=secondary onclick="editTask(${x.id})">変更</button><button class=secondary onclick="openWorkLog(${x.id})">作業実績</button></div></div></div>`}).join(""):"<div class=muted>該当する作業はありません。</div>";
+ $("taskTodayKpi").textContent=C.tasks.filter(x=>isTaskVisibleToday(x)&&!isTaskDoneToday(x)).length;
+ $("taskOpenKpi").textContent=C.tasks.filter(x=>isRecurring(x)||x.status!=="完了").length;
+}
+function renderHarvests(){$("harvestList").innerHTML=C.harvests.length?C.harvests.slice(0,50).map(x=>`<div class=item><b>${esc(x.crop_name)}</b> ${esc(x.variety||"")} <span class=badge>${esc(x.grade||"")||"等級なし"}</span><div class=muted>${x.harvest_date}　${fName(x.field_id)}　${Number(x.quantity||0).toLocaleString("ja-JP")} ${esc(x.unit||"")}</div></div>`).join(""):"<div class=muted>収穫記録なし</div>"}
+function renderProfitability(){
+ const rows=C.profitability||[];
+ $("profitabilityList").innerHTML=rows.length?rows.map(x=>{const gp=Number(x.gross_profit_yen||0);return `<div class="item"><div class="row"><b>🌱 ${esc(x.crop_name)} ${esc(x.variety||"")}</b><b class="${gp>=0?"positive":"negative"}">${yen(gp)}</b></div><div class="muted">${esc(x.field_name||"圃場未設定")}　${x.area_a||0}a　収穫 ${Number(x.harvest_kg||0).toLocaleString("ja-JP")}kg</div><div class="small">売上 ${yen(x.sales_yen)}　原価 ${yen(x.total_cost_yen)}（経費 ${yen(x.direct_expense_yen)}＋作業 ${yen(x.task_cost_yen)}）</div><div class="small">10aあたり：売上 ${yen(x.sales_per_a_yen)}　原価 ${yen(x.cost_per_a_yen)}　粗利益 ${yen(x.gross_profit_per_a_yen)}　作業 ${Math.round(Number(x.task_minutes||0)/60*10)/10}時間</div></div>`}).join(""):'<div class="muted">作付け記録がありません。</div>';
+ const u=C.unlinked||{};$("unlinkedFinance").innerHTML=`<div class="kpi"><div class="k"><span>未紐付け売上</span><b>${yen(u.unlinked_sales_yen)}</b></div><div class="k"><span>未紐付け経費</span><b>${yen(u.unlinked_expense_yen)}</b></div></div><div class="muted" style="margin-top:8px">売上 ${u.unlinked_sales_count||0}件・経費 ${u.unlinked_expense_count||0}件</div>`;
+ renderFinanceOverview(); renderUnlinkedFinanceDetail(); renderExpenseSummary(); renderManagementAnalysis();
+}
+
+function renderManagementAnalysis(){
+ const rows=C.profitability||[], mode=$("analysisMode")?.value||"crop";
+ const cropSel=$("analysisCrop");
+ if(cropSel){
+   const crops=[...new Set(rows.map(x=>x.crop_name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),"ja"));
+   const cur=cropSel.value;
+   cropSel.innerHTML='<option value="">すべて</option>'+crops.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+   if(crops.includes(cur))cropSel.value=cur;
+ }
+ const selected=cropSel?.value||"";
+ let filtered=rows.filter(x=>!selected||x.crop_name===selected);
+ const groups={};
+ filtered.forEach(x=>{
+   const key=mode==="field"?(x.field_name||"圃場未設定"):(x.crop_name||"作物未設定");
+   if(!groups[key])groups[key]={name:key,area:0,sales:0,cost:0,gross:0,minutes:0,plantings:0};
+   const g=groups[key];
+   g.area+=Number(x.area_a||0);
+   g.sales+=Number(x.sales_yen||0);
+   g.cost+=Number(x.total_cost_yen||0);
+   g.gross+=Number(x.gross_profit_yen||0);
+   g.minutes+=Number(x.task_minutes||0);
+   g.plantings+=1;
+ });
+ const arr=Object.values(groups).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ja"));
+ $("managementAnalysis").innerHTML=arr.length?arr.map(g=>{
+   const perA=g.area>0?g.gross/g.area*10:0;
+   const hours=g.minutes/60;
+   const perHour=hours>0?g.gross/hours:null;
+   return `<div class="item">
+     <div class="row"><b>${mode==="field"?"📍":"🌱 "} ${esc(g.name)}</b><b class="${g.gross>=0?"positive":"negative"}">${yen(g.gross)}</b></div>
+     <div class="muted">作付け ${g.plantings}件　面積 ${g.area.toFixed(2).replace(/\.00$/,"")}a</div>
+     <div class="small">売上 ${yen(g.sales)}　原価 ${yen(g.cost)}　粗利益 ${yen(g.gross)}</div>
+     <div class="small">10aあたり粗利益 ${yen(perA)}　作業 ${Math.round(g.minutes/60*10)/10}時間　1時間あたり粗利益 ${perHour===null?"—":yen(perHour)}</div>
+   </div>`;
+ }).join(""):'<div class="muted">分析できる作付けデータがありません。</div>';
+}
+function renderFinanceOverview(){
+ const sales=C.sales.reduce((a,x)=>a+Number(x.total_yen||0),0), exp=C.expenses.reduce((a,x)=>a+Number(x.amount_yen||0),0), profit=sales-exp;
+ const ps=C.profitability||[], linkedSales=ps.reduce((a,x)=>a+Number(x.sales_yen||0),0), linkedCost=ps.reduce((a,x)=>a+Number(x.total_cost_yen||0),0);
+ $("financeOverview").innerHTML=`<div class="kpi"><div class="k"><span>累計売上</span><b>${yen(sales)}</b></div><div class="k"><span>累計経費</span><b>${yen(exp)}</b></div><div class="k"><span>累計収支</span><b class="${profit>=0?"positive":"negative"}">${yen(profit)}</b></div><div class="k"><span>作付け紐付け済売上</span><b>${yen(linkedSales)}</b></div></div><div class="muted" style="margin-top:8px">作付けに紐付いた原価 ${yen(linkedCost)}　／　作付け ${ps.length}件</div>`;
+}
+function renderUnlinkedFinanceDetail(){
+ const sales=C.sales.filter(x=>!x.planting_id), exps=C.expenses.filter(x=>!x.planting_id), rows=[];
+ sales.slice(0,20).forEach(x=>rows.push(`<div class="item"><div class="row"><b>💴 売上 ${yen(x.total_yen)}</b><span class="muted">${x.sale_date||"-"}</span></div><div class="small">商品ID ${x.product_id}　数量 ${x.quantity||0}</div><div class="grid2"><select id="linkSale_${x.id}">${plantingOptions()}</select><button class="secondary" onclick="linkSale(${x.id})">作付けに紐付け</button></div></div>`));
+ exps.slice(0,20).forEach(x=>rows.push(`<div class="item"><div class="row"><b>💸 経費 ${yen(x.amount_yen)}</b><span class="muted">${x.expense_date||"-"}</span></div><div class="small">${esc(x.category||"")}　${esc(x.item_name||"")}</div><div class="grid2"><select id="linkExpense_${x.id}">${plantingOptions()}</select><button class="secondary" onclick="linkExpense(${x.id})">作付けに紐付け</button></div></div>`));
+ $("unlinkedFinanceDetail").innerHTML=rows.length?rows.join(""):'<div class="muted" style="margin-top:10px">未紐付けの明細はありません。</div>';
+}
+function plantingOptions(){return '<option value="">作付けを選択</option>'+C.plantings.map(x=>`<option value="${x.id}">${esc(x.crop_name)} ${esc(x.variety||"")}　${esc(fName(x.field_id))}</option>`).join("")}
+async function linkSale(id){const pid=Number($("linkSale_"+id).value||0);if(!pid)return alert("作付けを選択してください");const p=C.plantings.find(x=>x.id===pid);const r=await sb.from("sales").update({planting_id:pid,field_id:p?.field_id||null}).eq("id",id);if(r.error)return alert("紐付けに失敗しました："+r.error.message);await load();renderProfitability();}
+async function linkExpense(id){const pid=Number($("linkExpense_"+id).value||0);if(!pid)return alert("作付けを選択してください");const p=C.plantings.find(x=>x.id===pid);const r=await sb.from("expenses").update({planting_id:pid,field_id:p?.field_id||null}).eq("id",id);if(r.error)return alert("紐付けに失敗しました："+r.error.message);await load();renderProfitability();}
+function renderExpenseSummary(){
+ const exps=C.expenses||[];
+ const total=exps.reduce((a,x)=>a+Number(x.amount_yen||0),0);
+ const linked=exps.filter(x=>x.planting_id).reduce((a,x)=>a+Number(x.amount_yen||0),0);
+ const unlinked=total-linked;
+ const by={}; exps.forEach(x=>{const k=x.category||"その他";by[k]=(by[k]||0)+Number(x.amount_yen||0)});
+ const entries=Object.entries(by).sort((a,b)=>b[1]-a[1]);
+ $("expenseSummary").innerHTML=`<div class="kpi"><div class="k"><span>累計経費</span><b>${yen(total)}</b></div><div class="k"><span>作付け紐付け済</span><b>${yen(linked)}</b></div><div class="k"><span>未紐付け</span><b>${yen(unlinked)}</b></div></div>`;
+ $("expenseBreakdown").innerHTML=entries.length?'<b>科目別</b>'+entries.map(([k,v])=>`<div class="row" style="padding:6px 0;border-bottom:1px solid #eee"><span>${esc(k)}</span><b>${yen(v)}</b></div>`).join(''):'<div class="muted">経費記録はありません。</div>';
+}
+function renderMoney(){let ms=monthStart(),a=[];C.sales.filter(x=>x.sale_date>=ms).forEach(x=>a.push({d:x.sale_date,n:"売上",v:Number(x.total_yen||0)}));C.expenses.filter(x=>x.expense_date>=ms).forEach(x=>a.push({d:x.expense_date,n:x.item_name,v:-Number(x.amount_yen||0)}));a.sort((x,y)=>String(y.d).localeCompare(String(x.d)));$("moneyList").innerHTML=a.length?a.slice(0,60).map(x=>`<div class=item><div class=row><b>${esc(x.n)}</b><b class=${x.v>=0?"positive":"negative"}>${yen(x.v)}</b></div><div class=muted>${x.d}</div></div>`).join(""):"<div class=muted>今月の記録なし</div>"}
+function renderOrders(){$("ordersList").innerHTML=C.orders.length?C.orders.map(o=>{let c=C.customers.find(x=>x.id===o.customer_id),is=C.items.filter(i=>i.order_id===o.id).map(i=>{let p=C.products.find(p=>p.id===i.product_id);return `${esc(p?.product_name||"商品")} ${i.quantity}${esc(p?.unit||"")}`}).join(" / ");return `<div class=item><b>🧾 ${esc(c?.customer_name||"お客様")}</b> <span class=badge>${esc(o.status||"受付")}</span><div>${is}</div><b>${yen(o.total_yen)}</b><div class=muted>${o.receive_method||"発送"} ${o.requested_date?"・希望 "+o.requested_date:""}${c?.customer_type?"・経路 "+c.customer_type:""}</div><button class=secondary onclick="directShip(${o.id})">📦 出荷</button></div>`}).join(""):"<div class=muted>注文なし</div>"}
+function fillFields(el){el.innerHTML='<option value="">圃場を選択</option>'+[...C.fields].sort(sortFields).map(x=>`<option value="${x.id}">${esc(x.field_name)}　${x.actual_area_a??x.area_a??x.ledger_area_a??0}a</option>`).join("")}
+function fillTaskFields(){fillFields($("newTaskField"));fillPlantingsSelect($("newTaskPlanting"),true);let crops=[...new Set(C.plantings.map(x=>x.crop_name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),"ja"));$("newTaskCrop").innerHTML='<option value="">作物を選択</option>'+crops.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");} 
+function toggleTaskScope(){let shared=$("newTaskScope").value==="crop";$("taskPlantingWrap").classList.toggle("hidden",shared);$("taskCropWrap").classList.toggle("hidden",!shared);if(shared){$("newTaskPlanting").value="";}else{$("newTaskCrop").value="";}}function fillPlantingFields(){fillFields($("newPlantField"));fillPlantingsSelect($("newSalePlanting"),true);fillPlantingsSelect($("newExpensePlanting"),true)}
+function fillPlantingsSelect(el,optional){if(!el)return;el.innerHTML=`<option value="">${optional?"作付けを選択（任意）":"作付けを選択"}</option>`+C.plantings.map(x=>`<option value="${x.id}">${esc(x.crop_name)} ${esc(x.variety||"")}　${esc(fName(x.field_id))}</option>`).join("")}
+function fillProfitFields(){fillFields($("newSaleField"));fillFields($("newExpenseField"));fillPlantingsSelect($("newSalePlanting"),true);fillPlantingsSelect($("newExpensePlanting"),true)}
+function fillHarvest(){$("newHarvestDate").value=todayJP();$("newHarvestPlanting").innerHTML='<option value="">作付けを選択</option>'+C.plantings.map(x=>`<option value="${x.id}">${esc(x.crop_name)} ${esc(x.variety||"")}　${esc(fName(x.field_id))}</option>`).join("")}
+function fillOrderProducts(){$("newOrderProduct").innerHTML='<option value="">商品を選択</option>'+C.products.filter(x=>x.active!==false).map(x=>`<option value="${x.id}">${esc(x.product_name||x.crop_name)}（${esc(x.unit||"")}）</option>`).join("")}
+function fillMarketProducts(){$("marketProduct").innerHTML='<option value="">商品を選択</option>'+C.products.filter(x=>x.active!==false).map(x=>`<option value="${x.id}">${esc(x.product_name||x.crop_name)}（${esc(x.unit||"")}）</option>`).join("")}
+function fillDestinations(){$("destinationList").innerHTML=C.destinations.map(x=>`<option value="${esc(x.destination_name)}"></option>`).join("");$("storeList").innerHTML=C.destinations.map(x=>`<div class=item><b>${esc(x.destination_name)}</b>　${x.commission_type==="percent"?x.commission_value+"%":"¥"+x.commission_value}<div class=muted>${esc(x.notes||"")}</div></div>`).join("")||"<div class=muted>店舗設定なし</div>"}
+function shippingMode(m){["shipDirect","shipMarket","shipSettle","shipStore"].forEach(x=>$(x).classList.add("hidden"));$("ship"+({direct:"Direct",market:"Market",settle:"Settle",store:"Store"}[m])).classList.remove("hidden");if(m==="market")renderShipping();if(m==="settle")renderSettlement()}
+function renderShipping(){let pending=C.shipments.map(s=>({...s,items:C.shipmentItems.filter(i=>i.shipment_id===s.id)}));$("directList").innerHTML=C.orders.filter(o=>!["発送済","キャンセル","取消"].includes(o.status)).map(o=>{let c=C.customers.find(x=>x.id===o.customer_id);return `<div class=item><b>${esc(c?.customer_name||"お客様")}</b> <span class=badge>${esc(o.status||"受付")}</span><div class=muted>希望 ${o.requested_date||"-"}　${o.receive_method||"発送"}</div><button class=primary onclick="directShip(${o.id})">この注文を出荷</button></div>`}).join("")||"<div class=muted>出荷待ちの直販注文はありません。</div>";
+ $("marketPending").innerHTML=pending.length?pending.map(s=>{let i=s.items[0],p=C.products.find(p=>p.id===i?.product_id),sett=C.settlements.find(x=>x.shipment_item_id===i?.id);return `<div class=item><b>${esc(s.destination_name)}</b>　${esc(p?.product_name||"商品")}<div class=muted>${s.shipment_date}　出荷 ${i?.quantity||0}${esc(p?.unit||"")}</div>${sett?"<span class=badge>精算済</span>":"<span class=badge>未精算</span>"}</div>`}).join(""):"<div class=muted>出荷記録なし</div>"}
+function renderSettlement(){
+ const rows=C.shipments.flatMap(s=>C.shipmentItems.filter(i=>i.shipment_id===s.id).map(i=>({s,i,sett:C.settlements.find(x=>x.shipment_item_id===i.id),p:C.products.find(p=>p.id===i.product_id)}))).filter(x=>!x.sett);
+ $("settleList").innerHTML=rows.length?rows.map(x=>`<div class=item><b>${esc(x.s.destination_name)}</b>　${esc(x.p?.product_name||"商品")}<div class=muted>出荷 ${x.i.quantity}${esc(x.p?.unit||"")} × ${yen(x.i.unit_price_yen)}</div><label>返品数量</label><input id="ret_${x.i.id}" type="number" min="0" max="${x.i.quantity}" step=".01" value="0"><label>返品処理</label><select id="disp_${x.i.id}"><option value="">返品なし</option><option value="返品入庫">返品入庫</option><option value="廃棄・ロス">廃棄・ロス</option></select><label>返品理由</label><input id="reason_${x.i.id}"><button class=primary onclick="settle(${x.i.id})">実売数を確定</button></div>`).join(""):"<div class=muted>未精算はありません。</div>"
+}
+async function addField(){let n=$("newFieldName").value.trim();if(!n)return msg("fieldMsg","<div class=err>圃場名を入力してください。</div>");let r=await sb.from("fields").insert({field_name:n,area_a:Number($("newFieldArea").value||0),rank:$("newFieldRank").value,soil_type:$("newFieldSoil").value||null,drainage:$("newFieldDrainage").value||null,animal_damage:$("newFieldAnimal").value||null,notes:$("newFieldNotes").value||null});if(r.error)return msg("fieldMsg","<div class=err>登録できませんでした。</div>");msg("fieldMsg","<div class=success>✅登録しました</div>");await load()}
+async function savePlanting(){let c=$("newPlantCrop").value.trim(),f=Number($("newPlantField").value||0),area=Number($("newPlantArea").value||0),id=Number($("editPlantingId").value||0);if(!c||!f||area<=0)return msg("plantingMsg","<div class=err>作物・圃場・面積を入力してください。</div>");let data={field_id:f,crop_name:c,variety:$("newPlantVariety").value||null,status:$("newPlantStatus").value,planting_date:$("newPlantDate").value||null,expected_harvest_date:$("newPlantHarvest").value||null,area_a:area,notes:$("newPlantNotes").value||null};let r=id?await sb.from("crop_plantings").update(data).eq("id",id):await sb.from("crop_plantings").insert(data);if(r.error)return msg("plantingMsg","<div class=err>保存できませんでした。</div>");msg("plantingMsg",`<div class=success>✅${id?"変更":"登録"}しました</div>`);cancelPlantingEdit();await load()}
+function editPlanting(id){let x=C.plantings.find(v=>v.id===id);if(!x)return;$("editPlantingId").value=x.id;$("newPlantCrop").value=x.crop_name||"";$("newPlantVariety").value=x.variety||"";fillPlantingFields();$("newPlantField").value=String(x.field_id);$("newPlantArea").value=x.area_a||"";$("newPlantStatus").value=x.status||"栽培中";$("newPlantDate").value=x.planting_date||"";$("newPlantHarvest").value=x.expected_harvest_date||"";$("newPlantNotes").value=x.notes||"";$("plantingFormTitle").textContent="作付けを変更";$("plantingSaveBtn").textContent="変更を保存";$("plantingCancelBtn").classList.remove("hidden");$("plantingBox").classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"})}
+function cancelPlantingEdit(){$("editPlantingId").value="";$("plantingFormTitle").textContent="新しい作付け";$("plantingSaveBtn").textContent="登録";$("plantingCancelBtn").classList.add("hidden");$("plantingBox").classList.add("hidden");$("plantingMsg").innerHTML="";["newPlantCrop","newPlantVariety","newPlantArea","newPlantDate","newPlantHarvest","newPlantNotes"].forEach(id=>$(id).value="")}
+
+function openNewTask(){fillTaskFields();$("taskBox").classList.remove("hidden");$("taskFormTitle").textContent="新しい作業";$("editTaskId").value="";$("newTaskDate").value=todayJP();$("newTaskName").value="";$("newTaskPlanting").value="";$("newTaskScope").value="planting";$("newTaskCrop").value="";toggleTaskScope();$("newTaskPriority").value="通常";$("newTaskDaily").checked=false;$("newTaskNotes").value="";$("taskCancelBtn").classList.add("hidden");$("taskMsg").innerHTML="";window.scrollTo({top:0,behavior:"smooth"})}
+function editTask(id){
+  const x=C.tasks.find(v=>Number(v.id)===Number(id));
+  if(!x)return;
+  $("taskBox").classList.remove("hidden");
+  $("taskFormTitle").textContent="作業を変更";
+  $("editTaskId").value=x.id;
+  $("newTaskDate").value=x.task_date||todayJP();
+  $("newTaskName").value=x.task_name||"";
+  $("newTaskField").value=x.field_id||"";
+  $("newTaskPriority").value=x.priority||"通常";
+  $("newTaskDaily").checked=isRecurring(x);
+  $("newTaskNotes").value=x.notes||"";
+  if(x.crop_name&&!x.planting_id){
+    $("newTaskScope").value="crop";
+    toggleTaskScope();
+    $("newTaskCrop").value=x.crop_name;
+  }else{
+    $("newTaskScope").value="planting";
+    toggleTaskScope();
+    $("newTaskPlanting").value=x.planting_id||"";
+  }
+  $("taskCancelBtn").classList.remove("hidden");
+  $("taskBox").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function openWorkLog(id){
+  let t=C.tasks.find(x=>Number(x.id)===Number(id));
+  if(!t)return;
+  $("workLogTaskId").value=t.id;
+  const isCrop=!!(t.crop_name && !t.planting_id);
+  $("workLogTaskName").textContent=`🚜 ${t.task_name}`;
+  const scope=$("workLogScope");
+  const alloc=$("workLogAllocation");
+  scope.className=`workScope ${isCrop?"":"individual"}`;
+  scope.textContent=isCrop?`🥕 ${t.crop_name}｜作物全体（同じ作物にシンクロ）`:`📍 ${fName(t.field_id)}｜個別の作付け`;
+  scope.classList.remove("hidden");
+  if(isCrop){
+    const ps=C.plantings.filter(p=>p.crop_name===t.crop_name && (p.status||"")!=="終了");
+    const total=ps.reduce((a,p)=>a+Number(p.area_a||0),0);
+    alloc.innerHTML=ps.length?`<div class="workAlloc"><b>実績の配分先</b><br>${ps.map(p=>`${esc(fName(p.field_id))} ${Number(p.area_a||0)}a（${total?Math.round(Number(p.area_a||0)/total*100):0}%）`).join('<br>')}<br><span class="muted">作業時間・人件費・機械費・資材費は面積比で自動按分します。</span></div>`:`<div class="workAlloc">同じ作物の栽培中作付けが見つかりません。</div>`;
+    alloc.classList.remove("hidden");
+  }else{
+    alloc.classList.add("hidden");
+    alloc.innerHTML="";
+  }
+  $("workLogDate").value=t.task_date||todayJP();$("workLogWorkers").value=1;$("workLogMinutes").value=60;$("workLogLabor").value=0;$("workLogMachine").value=0;$("workLogMaterial").value="";$("workLogMaterialQty").value=0;$("workLogMaterialUnit").value="kg";$("workLogMaterialUnitCost").value=0;$("workLogNotes").value="";$("workLogMsg").innerHTML="";$("workLogBox").classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"})}
+function cancelWorkLog(){$("workLogBox").classList.add("hidden");$("workLogTaskId").value=""}
+async function saveWorkLog(){let taskId=Number($("workLogTaskId").value||0),workers=Number($("workLogWorkers").value||0),minutes=Number($("workLogMinutes").value||0),labor=Number($("workLogLabor").value||0),machine=Number($("workLogMachine").value||0),mat=$("workLogMaterial").value.trim(),qty=Number($("workLogMaterialQty").value||0),unit=$("workLogMaterialUnit").value.trim()||"kg",unitCost=Number($("workLogMaterialUnitCost").value||0);if(!taskId||workers<1||minutes<0||labor<0||machine<0)return msg("workLogMsg","<div class=err>作業実績の入力を確認してください。</div>");if(mat&&qty<=0)return msg("workLogMsg","<div class=err>資材名を入力した場合は使用量も入力してください。</div>");let r=await sb.from("task_work_logs").insert({task_id:taskId,work_date:$("workLogDate").value||todayJP(),workers,minutes,labor_cost_yen:labor,machine_cost_yen:machine,notes:$("workLogNotes").value||null});if(r.error)return msg("workLogMsg","<div class=err>作業実績を保存できませんでした。</div>");if(mat){let m=await sb.from("task_material_usages").insert({task_id:taskId,usage_date:$("workLogDate").value||todayJP(),material_name:mat,quantity:qty,unit,unit_cost_yen:unitCost,notes:$("workLogNotes").value||null});if(m.error)return msg("workLogMsg","<div class=err>作業実績は保存されましたが、資材記録に失敗しました。</div>")}msg("workLogMsg","<div class=success>✅作業実績を保存しました</div>");await load();cancelWorkLog()}
+async function addHarvest(){let pid=Number($("newHarvestPlanting").value||0),q=Number($("newHarvestQty").value||0);if(!pid||q<=0)return msg("harvestMsg","<div class=err>作付けと数量を入力してください。</div>");let p=C.plantings.find(x=>x.id===pid),d=$("newHarvestDate").value||todayJP();let h=await sb.from("harvests").insert({harvest_date:d,field_id:p.field_id,planting_id:p.id,crop_name:p.crop_name,variety:p.variety||null,quantity:q,unit:$("newHarvestUnit").value,grade:$("newHarvestGrade").value||null,notes:$("newHarvestNotes").value||null}).select().single();if(h.error)return msg("harvestMsg","<div class=err>収穫登録に失敗しました。</div>");let m=await sb.from("inventory_movements").insert({movement_date:d,crop_name:p.crop_name,variety:p.variety||null,quantity:q,unit:$("newHarvestUnit").value,movement_type:"収穫",source_id:h.data.id,notes:"収穫登録から自動作成"});if(m.error)return msg("harvestMsg","<div class=err>収穫は登録されましたが在庫反映に失敗しました。</div>");msg("harvestMsg","<div class=success>✅収穫・在庫反映完了</div>");await load()}
+async function addOrder(){let name=$("newOrderCustomer").value.trim(),pid=Number($("newOrderProduct").value||0),q=Number($("newOrderQty").value||0),pr=Number($("newOrderPrice").value||0);if(!name||!pid||q<=0)return msg("orderMsg","<div class=err>お客様・商品・数量を入力してください。</div>");let c=C.customers.find(x=>x.customer_name===name);if(!c){let z=await sb.from("customers").insert({customer_name:name,customer_type:$("newOrderType").value,phone:$("newOrderPhone").value||null,address:$("newOrderAddress").value||null}).select().single();if(z.error)return msg("orderMsg","<div class=err>お客様登録に失敗しました。</div>");c=z.data}let o=await sb.from("orders").insert({order_date:$("newOrderDate").value||todayJP(),customer_id:c.id,status:"受付",total_yen:q*pr,notes:$("newOrderNotes").value||null,receive_method:$("newOrderReceive").value,requested_date:$("newOrderRequested").value||null,shipping_address:$("newOrderAddress").value||null}).select().single();if(o.error)return msg("orderMsg","<div class=err>注文登録に失敗しました。</div>");let i=await sb.from("order_items").insert({order_id:o.data.id,product_id:pid,quantity:q,unit_price_yen:pr});if(i.error)return msg("orderMsg","<div class=err>注文は登録されましたが明細登録に失敗しました。</div>");msg("orderMsg","<div class=success>✅注文登録完了</div>");await load()}
+async function directShip(orderId){
+ if(!confirm("この注文を発送済みにして、売上・在庫へ反映しますか？"))return;
+ const tracking=prompt("追跡番号（不要なら空欄）")||null;
+ const r=await sb.rpc("ship_order",{p_order_id:orderId,p_tracking_number:tracking});
+ if(r.error)return alert("発送処理に失敗しました\n"+r.error.message);
+ await load();show("shipping",document.querySelectorAll("nav button")[5]);alert("発送・売上・在庫反映が完了しました。");
+}
+async function addMarketShipment(){
+ const dest=$("marketDestination").value.trim(),pid=Number($("marketProduct").value||0),q=Number($("marketQty").value||0),price=Number($("marketPrice").value||0);
+ if(!dest||!pid||q<=0||price<0)return msg("marketMsg","<div class=err>出荷先・商品・数量・単価を入力してください。</div>");
+ const r=await sb.rpc("record_supermarket_shipment",{p_product_id:pid,p_quantity:q,p_unit_price_yen:price,p_shipment_date:$('marketDate').value||todayJP(),p_destination_name:dest,p_notes:$('marketNotes').value||null});
+ if(r.error)return msg("marketMsg","<div class=err>出荷登録に失敗しました。\n"+esc(r.error.message)+"</div>");
+ const d=C.destinations.find(x=>x.destination_name===dest);
+ msg("marketMsg",`<div class=success>✅出荷を記録しました。${d?`手数料 ${d.commission_type==='percent'?d.commission_value+'%':'¥'+d.commission_value} を保存設定から自動適用しました。`:'<br>⚠️この店舗は手数料0%で記録されています。店舗設定で登録してください。'}</div>`);
+ await load();shippingMode("market");
+}
+async function settle(itemId){
+ const i=C.shipmentItems.find(x=>x.id===itemId); if(!i)return;
+ const ret=Number($("ret_"+itemId).value||0),disp=$("disp_"+itemId).value,reason=$("reason_"+itemId).value||null;
+ if(ret<0||ret>Number(i.quantity))return alert("返品数量を確認してください");
+ if(C.settlements.some(x=>x.shipment_item_id===itemId))return alert("すでに精算済みです");
+ const r=await sb.rpc("settle_supermarket_shipment",{p_shipment_item_id:itemId,p_returned_quantity:ret,p_return_disposition:disp||"返品入庫",p_return_reason:reason,p_settlement_date:todayJP(),p_notes:reason});
+ if(r.error)return alert("精算に失敗しました\n"+r.error.message);
+ const z=r.data||{};await load();renderSettlement();alert(`精算完了\n出荷 ${z.shipped_quantity||0}\n返品 ${z.returned_quantity||0}\n実売 ${z.sold_quantity||0}\n売上 ${yen(z.gross_sales_yen||0)}\n手数料 ${yen(z.commission_yen||0)}\n入金見込 ${yen(z.net_sales_yen||0)}`);
+}
+async function saveStore(){let n=$("storeName").value.trim(),v=Number($("storeCommission").value||0),t=$("storeCommissionType").value;if(!n)return msg("storeMsg","<div class=err>店舗名を入力してください。</div>");let old=C.destinations.find(x=>x.destination_name===n),r=old?await sb.from("sales_destinations").update({commission_type:t,commission_value:v,notes:$("storeNotes").value||null,active:true,updated_at:new Date().toISOString()}).eq("id",old.id):await sb.from("sales_destinations").insert({destination_name:n,sales_channel:"市場・スーパー",commission_type:t,commission_value:v,notes:$("storeNotes").value||null,active:true});if(r.error)return msg("storeMsg","<div class=err>保存に失敗しました。</div>");msg("storeMsg","<div class=success>✅店舗と手数料を保存しました。次回から自動適用します。</div>");await load();shippingMode("store")}
+async function addSale(){let q=Number($("newSaleQty").value||0),p=Number($("newSalePrice").value||0),n=$("newSaleProduct").value.trim()||"販売";if(q<=0)return msg("saleMsg","<div class=err>数量を入力してください。</div>");let ex=C.products.find(x=>x.product_name===n),pid=ex?.id;if(!pid){let z=await sb.from("products").insert({product_name:n,unit:"式",price_yen:p,active:true}).select().single();if(z.error)return msg("saleMsg","<div class=err>商品作成に失敗しました。</div>");pid=z.data.id}let salePlanting=Number($("newSalePlanting").value||0),saleField=Number($("newSaleField").value||0);let s=await sb.from("sales").insert({sale_date:$("newSaleDate").value||todayJP(),product_id:pid,quantity:q,unit_price_yen:p,field_id:saleField||null,planting_id:salePlanting||null,notes:$("newSaleNotes").value||null}).select().single();if(s.error)return msg("saleMsg","<div class=err>売上登録に失敗しました。</div>");msg("saleMsg","<div class=success>✅売上登録完了</div>");await load()}
+async function addExpense(){let item=$("newExpenseItem").value.trim(),a=Number($("newExpenseAmount").value||0);if(!item||a<=0)return msg("expenseMsg","<div class=err>内容と金額を入力してください。</div>");let expensePlanting=Number($("newExpensePlanting").value||0),expenseField=Number($("newExpenseField").value||0);let r=await sb.from("expenses").insert({expense_date:$("newExpenseDate").value||todayJP(),category:$("newExpenseCategory").value,item_name:item,amount_yen:a,field_id:expenseField||null,planting_id:expensePlanting||null,notes:$("newExpenseNotes").value||null});if(r.error)return msg("expenseMsg","<div class=err>経費登録に失敗しました。</div>");msg("expenseMsg","<div class=success>✅経費登録完了</div>");await load()}
+function show(id,btn){document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));btn?.classList.add("active");if(id==="shipping")renderShipping();if(id==="orders")renderOrders();if(id==="money"){renderMoney();renderProfitability();fillProfitFields()}}
+async function login(){
+ const btn=document.querySelector('#login button');
+ const err=$("loginErr");
+ try{
+  if(btn){btn.disabled=true;btn.textContent="ログイン中…";}
+  const email=$("email").value.trim(), password=$("password").value;
+  if(!email||!password){msg("loginErr","メールアドレスとパスワードを入力してください。");return;}
+  const client=ensureSupabase();
+  const r=await client.auth.signInWithPassword({email,password});
+  if(r.error){msg("loginErr",`ログインできませんでした。${esc(r.error.message||"メールアドレスまたはパスワードを確認してください。")}`);return;}
+  await open();
+ }catch(e){msg("loginErr",`ログイン処理でエラーが発生しました。${esc(e?.message||e)}`);}
+ finally{if(btn){btn.disabled=false;btn.textContent="ログイン";}}
+}
+async function open(){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("nav").classList.remove("hidden");$("newSaleDate").value=todayJP();$("newExpenseDate").value=todayJP();await load()}
+(async()=>{try{const client=ensureSupabase();let s=await client.auth.getSession();if(s.data.session)await open()}catch(e){console.warn(e)}})()
+</script>
+</body>
+</html>
