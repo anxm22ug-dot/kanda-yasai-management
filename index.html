@@ -155,7 +155,12 @@ label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1
 <script>
 const SUPABASE_URL="https://sujucntchbjltlhrqwzo.supabase.co";
 const SUPABASE_KEY="sb_publishable_t9Wvdir7C78pLiwj4Dvsyw_R4yGtPI9";
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let sb=null;
+function ensureSupabase(){
+ if(sb) return sb;
+ if(typeof supabase==="undefined") throw new Error("Supabaseの読み込みに失敗しました。");
+ sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY); return sb;
+}
 const $=id=>document.getElementById(id);
 let C={fields:[],plantings:[],tasks:[],taskLogs:[],harvests:[],moves:[],sales:[],expenses:[],orders:[],customers:[],items:[],products:[],destinations:[],shipments:[],shipmentItems:[],settlements:[],taskCosts:[],profitability:[],unlinked:null};
 function todayJP(){return new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"})}
@@ -396,9 +401,22 @@ async function saveStore(){let n=$("storeName").value.trim(),v=Number($("storeCo
 async function addSale(){let q=Number($("newSaleQty").value||0),p=Number($("newSalePrice").value||0),n=$("newSaleProduct").value.trim()||"販売";if(q<=0)return msg("saleMsg","<div class=err>数量を入力してください。</div>");let ex=C.products.find(x=>x.product_name===n),pid=ex?.id;if(!pid){let z=await sb.from("products").insert({product_name:n,unit:"式",price_yen:p,active:true}).select().single();if(z.error)return msg("saleMsg","<div class=err>商品作成に失敗しました。</div>");pid=z.data.id}let salePlanting=Number($("newSalePlanting").value||0),saleField=Number($("newSaleField").value||0);let s=await sb.from("sales").insert({sale_date:$("newSaleDate").value||todayJP(),product_id:pid,quantity:q,unit_price_yen:p,field_id:saleField||null,planting_id:salePlanting||null,notes:$("newSaleNotes").value||null}).select().single();if(s.error)return msg("saleMsg","<div class=err>売上登録に失敗しました。</div>");msg("saleMsg","<div class=success>✅売上登録完了</div>");await load()}
 async function addExpense(){let item=$("newExpenseItem").value.trim(),a=Number($("newExpenseAmount").value||0);if(!item||a<=0)return msg("expenseMsg","<div class=err>内容と金額を入力してください。</div>");let expensePlanting=Number($("newExpensePlanting").value||0),expenseField=Number($("newExpenseField").value||0);let r=await sb.from("expenses").insert({expense_date:$("newExpenseDate").value||todayJP(),category:$("newExpenseCategory").value,item_name:item,amount_yen:a,field_id:expenseField||null,planting_id:expensePlanting||null,notes:$("newExpenseNotes").value||null});if(r.error)return msg("expenseMsg","<div class=err>経費登録に失敗しました。</div>");msg("expenseMsg","<div class=success>✅経費登録完了</div>");await load()}
 function show(id,btn){document.querySelectorAll(".page").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));btn?.classList.add("active");if(id==="shipping")renderShipping();if(id==="orders")renderOrders();if(id==="money"){renderMoney();renderProfitability();fillProfitFields()}}
-async function login(){let r=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(r.error)return msg("loginErr","ログインできませんでした。メールアドレスとパスワードを確認してください。");open()}
+async function login(){
+ const btn=document.querySelector('#login button');
+ const err=$("loginErr");
+ try{
+  if(btn){btn.disabled=true;btn.textContent="ログイン中…";}
+  const email=$("email").value.trim(), password=$("password").value;
+  if(!email||!password){msg("loginErr","メールアドレスとパスワードを入力してください。");return;}
+  const client=ensureSupabase();
+  const r=await client.auth.signInWithPassword({email,password});
+  if(r.error){msg("loginErr",`ログインできませんでした。${esc(r.error.message||"メールアドレスまたはパスワードを確認してください。")}`);return;}
+  await open();
+ }catch(e){msg("loginErr",`ログイン処理でエラーが発生しました。${esc(e?.message||e)}`);}
+ finally{if(btn){btn.disabled=false;btn.textContent="ログイン";}}
+}
 async function open(){$("login").classList.add("hidden");$("app").classList.remove("hidden");$("nav").classList.remove("hidden");$("newSaleDate").value=todayJP();$("newExpenseDate").value=todayJP();await load()}
-(async()=>{let s=await sb.auth.getSession();if(s.data.session)open()})()
+(async()=>{try{const client=ensureSupabase();let s=await client.auth.getSession();if(s.data.session)await open()}catch(e){console.warn(e)}})()
 </script>
 </body>
 </html>
