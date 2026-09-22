@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="manifest" href="manifest.json">
-<title>神田野菜マネージメント v12</title>
+<title>神田野菜マネージメント v13</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f7f2;color:#243024;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}
@@ -29,7 +29,7 @@ label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1
 </style>
 </head>
 <body>
-<header><h1>🌱 神田野菜マネージメント <span class="badge">v12</span></h1><div class="sub">今日やること → 収穫 → 在庫 → 出荷 → 注文 → 収支</div></header>
+<header><h1>🌱 神田野菜マネージメント <span class="badge">v13</span></h1><div class="sub">今日やること → 収穫 → 在庫 → 出荷 → 注文 → 収支</div></header>
 
 <div id="login" class="card" style="max-width:420px;margin:50px auto">
 <h2>ログイン</h2><div class="muted">Supabaseに登録したメールアドレスとパスワードでログインします。</div>
@@ -130,6 +130,14 @@ label{font-size:13px;font-weight:700}.grid2{display:grid;grid-template-columns:1
 <div class="card"><h2>💰 収支・採算</h2><div class="muted">売上・経費・作業実績を作付けに紐づけると、圃場・作物別の原価と粗利益が自動計算されます。</div></div>
 <div class="card"><h3>📈 経営全体</h3><div id="financeOverview">読み込み中…</div></div>
 <div class="card"><h3>📊 作付け別採算</h3><div id="profitabilityList">読み込み中…</div></div>
+<div class="card"><h3>📊 経営分析</h3>
+<div class="muted">作物別・圃場別に、売上・原価・粗利益・10aあたり・作業1時間あたりを確認できます。</div>
+<div class="grid2" style="margin-top:10px">
+<div><label>表示</label><select id="analysisMode" onchange="renderManagementAnalysis()"><option value="crop">作物別</option><option value="field">圃場別</option></select></div>
+<div><label>対象</label><select id="analysisCrop" onchange="renderManagementAnalysis()"><option value="">すべて</option></select></div>
+</div>
+<div id="managementAnalysis" style="margin-top:12px">読み込み中…</div>
+</div>
 <div class="card"><h3>⚠️ 未紐付けの売上・経費</h3><div id="unlinkedFinance">読み込み中…</div><div id="unlinkedFinanceDetail"></div><div class="muted">既存の売上・経費も、ここから作付けに紐付けできます。</div></div>
 <div class="card"><h3>売上登録</h3><label>販売日</label><input id="newSaleDate" type="date"><label>商品名</label><input id="newSaleProduct"><div class="grid2"><div><label>数量</label><input id="newSaleQty" type="number" min="0" step=".01"></div><div><label>単価</label><input id="newSalePrice" type="number" min="0"></div></div><div class="grid2"><div><label>圃場（任意）</label><select id="newSaleField"></select></div><div><label>作付け（任意）</label><select id="newSalePlanting"></select></div></div><label>メモ</label><input id="newSaleNotes"><button class="primary" onclick="addSale()">売上登録</button><div id="saleMsg"></div></div>
 <div class="card"><h3>💸 経費管理</h3><div id="expenseSummary">読み込み中…</div><div id="expenseBreakdown" style="margin-top:10px"></div></div>
@@ -255,7 +263,44 @@ function renderProfitability(){
  const rows=C.profitability||[];
  $("profitabilityList").innerHTML=rows.length?rows.map(x=>{const gp=Number(x.gross_profit_yen||0);return `<div class="item"><div class="row"><b>🌱 ${esc(x.crop_name)} ${esc(x.variety||"")}</b><b class="${gp>=0?"positive":"negative"}">${yen(gp)}</b></div><div class="muted">${esc(x.field_name||"圃場未設定")}　${x.area_a||0}a　収穫 ${Number(x.harvest_kg||0).toLocaleString("ja-JP")}kg</div><div class="small">売上 ${yen(x.sales_yen)}　原価 ${yen(x.total_cost_yen)}（経費 ${yen(x.direct_expense_yen)}＋作業 ${yen(x.task_cost_yen)}）</div><div class="small">10aあたり：売上 ${yen(x.sales_per_a_yen)}　原価 ${yen(x.cost_per_a_yen)}　粗利益 ${yen(x.gross_profit_per_a_yen)}　作業 ${Math.round(Number(x.task_minutes||0)/60*10)/10}時間</div></div>`}).join(""):'<div class="muted">作付け記録がありません。</div>';
  const u=C.unlinked||{};$("unlinkedFinance").innerHTML=`<div class="kpi"><div class="k"><span>未紐付け売上</span><b>${yen(u.unlinked_sales_yen)}</b></div><div class="k"><span>未紐付け経費</span><b>${yen(u.unlinked_expense_yen)}</b></div></div><div class="muted" style="margin-top:8px">売上 ${u.unlinked_sales_count||0}件・経費 ${u.unlinked_expense_count||0}件</div>`;
- renderFinanceOverview(); renderUnlinkedFinanceDetail(); renderExpenseSummary();
+ renderFinanceOverview(); renderUnlinkedFinanceDetail(); renderExpenseSummary(); renderManagementAnalysis();
+}
+
+function renderManagementAnalysis(){
+ const rows=C.profitability||[], mode=$("analysisMode")?.value||"crop";
+ const cropSel=$("analysisCrop");
+ if(cropSel){
+   const crops=[...new Set(rows.map(x=>x.crop_name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),"ja"));
+   const cur=cropSel.value;
+   cropSel.innerHTML='<option value="">すべて</option>'+crops.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+   if(crops.includes(cur))cropSel.value=cur;
+ }
+ const selected=cropSel?.value||"";
+ let filtered=rows.filter(x=>!selected||x.crop_name===selected);
+ const groups={};
+ filtered.forEach(x=>{
+   const key=mode==="field"?(x.field_name||"圃場未設定"):(x.crop_name||"作物未設定");
+   if(!groups[key])groups[key]={name:key,area:0,sales:0,cost:0,gross:0,minutes:0,plantings:0};
+   const g=groups[key];
+   g.area+=Number(x.area_a||0);
+   g.sales+=Number(x.sales_yen||0);
+   g.cost+=Number(x.total_cost_yen||0);
+   g.gross+=Number(x.gross_profit_yen||0);
+   g.minutes+=Number(x.task_minutes||0);
+   g.plantings+=1;
+ });
+ const arr=Object.values(groups).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ja"));
+ $("managementAnalysis").innerHTML=arr.length?arr.map(g=>{
+   const perA=g.area>0?g.gross/g.area*10:0;
+   const hours=g.minutes/60;
+   const perHour=hours>0?g.gross/hours:null;
+   return `<div class="item">
+     <div class="row"><b>${mode==="field"?"📍":"🌱 "} ${esc(g.name)}</b><b class="${g.gross>=0?"positive":"negative"}">${yen(g.gross)}</b></div>
+     <div class="muted">作付け ${g.plantings}件　面積 ${g.area.toFixed(2).replace(/\.00$/,"")}a</div>
+     <div class="small">売上 ${yen(g.sales)}　原価 ${yen(g.cost)}　粗利益 ${yen(g.gross)}</div>
+     <div class="small">10aあたり粗利益 ${yen(perA)}　作業 ${Math.round(g.minutes/60*10)/10}時間　1時間あたり粗利益 ${perHour===null?"—":yen(perHour)}</div>
+   </div>`;
+ }).join(""):'<div class="muted">分析できる作付けデータがありません。</div>';
 }
 function renderFinanceOverview(){
  const sales=C.sales.reduce((a,x)=>a+Number(x.total_yen||0),0), exp=C.expenses.reduce((a,x)=>a+Number(x.amount_yen||0),0), profit=sales-exp;
